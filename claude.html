@@ -7,409 +7,427 @@
     <style>
         body { margin: 0; overflow: hidden; font-family: 'Segoe UI', sans-serif; background: #000; }
         #ui {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            color: white;
-            font-size: 32px;
-            font-weight: bold;
-            text-shadow: 2px 2px #000;
-            pointer-events: none;
+            position: absolute; top: 20px; left: 20px;
+            color: white; font-size: 32px; font-weight: bold;
+            text-shadow: 2px 2px #000; pointer-events: none;
         }
         #instructions {
-            position: absolute;
-            bottom: 20px;
-            width: 100%;
-            text-align: center;
-            color: white;
-            font-size: 20px;
-            text-shadow: 2px 2px 4px black;
+            position: absolute; bottom: 20px; width: 100%;
+            text-align: center; color: white; font-size: 18px;
+            text-shadow: 2px 2px 4px black; pointer-events: none;
         }
         #gameover {
-            display: none;
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: white;
-            font-size: 48px;
-            font-weight: bold;
-            text-align: center;
-            text-shadow: 3px 3px #000;
+            display: none; position: absolute;
+            top: 50%; left: 50%; transform: translate(-50%, -50%);
+            color: white; font-size: 52px; font-weight: bold;
+            text-align: center; text-shadow: 3px 3px #000;
         }
-        #gameover span {
-            display: block;
-            font-size: 22px;
-            margin-top: 12px;
-        }
+        #gameover span { display: block; font-size: 22px; margin-top: 10px; }
     </style>
 </head>
 <body>
-    <div id="ui">Score: <span id="score">0</span></div>
-    <div id="instructions">W/S = Accelerate/Brake &nbsp;|&nbsp; A/D = Steer &nbsp;|&nbsp; SPACE = Jump &nbsp;|&nbsp; Yellow Ramps = Big Air!</div>
-    <div id="gameover">CRASHED!<span>Press R to Restart</span></div>
+<div id="ui">Score: <span id="score">0</span></div>
+<div id="instructions">
+    W/S = Faster / Brake &nbsp;|&nbsp; A/D = Steer &nbsp;|&nbsp; SPACE = Jump<br>
+    In Air: A/D = Spin 360° &nbsp;|&nbsp; W/S = Flip &nbsp;|&nbsp; R = Restart
+</div>
+<div id="gameover">CRASHED!<span>Press R to Restart</span></div>
 
-    <script type="importmap">
-        {
-            "imports": {
-                "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
-            }
+<script type="importmap">
+{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+
+// ─── SCENE ───────────────────────────────────────────────────────────────────
+const scene    = new THREE.Scene();
+scene.background = new THREE.Color(0x87ceeb);
+scene.fog        = new THREE.Fog(0x87ceeb, 60, 220);
+
+const camera   = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+document.body.appendChild(renderer.domElement);
+
+// ─── LIGHTING ────────────────────────────────────────────────────────────────
+const sun = new THREE.DirectionalLight(0xffffff, 1.4);
+sun.position.set(40, 100, 60);
+sun.castShadow = true;
+scene.add(sun);
+scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+
+// ─── FLAT FLOOR (y = 0 always — no slope math needed) ────────────────────────
+// The "downhill" feel comes from constant forward push + camera tilt, not geometry.
+const ROAD_LENGTH = 5000;
+
+const roadCanvas = document.createElement('canvas');
+roadCanvas.width = 256; roadCanvas.height = 1024;
+const rc = roadCanvas.getContext('2d');
+rc.fillStyle = '#3a3a3a'; rc.fillRect(0, 0, 256, 1024);
+// lane lines
+rc.strokeStyle = '#ffffff'; rc.setLineDash([80, 80]); rc.lineWidth = 6;
+rc.beginPath(); rc.moveTo(128, 0); rc.lineTo(128, 1024); rc.stroke();
+// edge lines
+rc.strokeStyle = '#ffff00'; rc.setLineDash([]); rc.lineWidth = 5;
+rc.beginPath(); rc.moveTo(8,0);   rc.lineTo(8,1024);   rc.stroke();
+rc.beginPath(); rc.moveTo(248,0); rc.lineTo(248,1024); rc.stroke();
+
+const roadTex = new THREE.CanvasTexture(roadCanvas);
+roadTex.wrapS = roadTex.wrapT = THREE.RepeatWrapping;
+roadTex.repeat.set(1, ROAD_LENGTH / 20);
+
+const road = new THREE.Mesh(
+    new THREE.PlaneGeometry(22, ROAD_LENGTH),
+    new THREE.MeshPhongMaterial({ map: roadTex })
+);
+road.rotation.x = -Math.PI / 2;
+road.position.set(0, 0, -ROAD_LENGTH / 2);
+road.receiveShadow = true;
+scene.add(road);
+
+const grass = new THREE.Mesh(
+    new THREE.PlaneGeometry(400, ROAD_LENGTH),
+    new THREE.MeshPhongMaterial({ color: 0x2d8a2d })
+);
+grass.rotation.x = -Math.PI / 2;
+grass.position.set(0, -0.01, -ROAD_LENGTH / 2);
+scene.add(grass);
+
+// Roadside trees for speed feel
+for (let i = 0; i < 200; i++) {
+    const z = -(Math.random() * ROAD_LENGTH);
+    const side = Math.random() > 0.5 ? 1 : -1;
+    const x = side * (14 + Math.random() * 30);
+    const trunk = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.3, 0.4, 3, 6),
+        new THREE.MeshPhongMaterial({ color: 0x5c3a1e })
+    );
+    trunk.position.set(x, 1.5, z);
+    scene.add(trunk);
+    const top = new THREE.Mesh(
+        new THREE.ConeGeometry(2.2, 4, 7),
+        new THREE.MeshPhongMaterial({ color: 0x1a6b1a })
+    );
+    top.position.set(x, 5, z);
+    scene.add(top);
+}
+
+// ─── CAR ─────────────────────────────────────────────────────────────────────
+const carGroup = new THREE.Group();
+
+// Body
+const body = new THREE.Mesh(
+    new THREE.BoxGeometry(1.3, 0.45, 2.4),
+    new THREE.MeshPhongMaterial({ color: 0xff2020 })
+);
+body.castShadow = true;
+carGroup.add(body);
+
+// Cabin
+const cabin = new THREE.Mesh(
+    new THREE.BoxGeometry(1.0, 0.42, 1.15),
+    new THREE.MeshPhongMaterial({ color: 0x222244 })
+);
+cabin.position.set(0, 0.43, -0.2);
+carGroup.add(cabin);
+
+// Windshield
+const wind = new THREE.Mesh(
+    new THREE.BoxGeometry(0.92, 0.32, 0.06),
+    new THREE.MeshPhongMaterial({ color: 0x88aaff, transparent: true, opacity: 0.55 })
+);
+wind.position.set(0, 0.5, 0.38);
+carGroup.add(wind);
+
+// Wheels
+const wheels = [];
+[[ 0.72, -0.18,  0.78],
+ [-0.72, -0.18,  0.78],
+ [ 0.72, -0.18, -0.78],
+ [-0.72, -0.18, -0.78]].forEach(p => {
+    const w = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.3, 0.3, 0.3, 14),
+        new THREE.MeshPhongMaterial({ color: 0x111111 })
+    );
+    w.rotation.z = Math.PI / 2;
+    w.position.set(...p);
+    carGroup.add(w);
+    wheels.push(w);
+});
+
+scene.add(carGroup);
+
+// ─── PHYSICS STATE ───────────────────────────────────────────────────────────
+// pos.y == 0 means on the ground. Floor is always at y=0.
+let pos        = new THREE.Vector3(0, 0.3, 0);
+let speed      = 0;        // forward speed (positive = moving in -Z direction)
+let velX       = 0;        // lateral drift velocity
+let velY       = 0;        // vertical velocity
+let heading    = 0;        // car yaw (radians, freely spinning)
+let isGrounded = true;
+
+// Air rotation state — angular velocities (rad/frame)
+let airYawVel   = 0;   // spin (A/D in air)
+let airPitchVel = 0;   // flip (W/S in air)
+let airYaw      = 0;   // accumulated yaw while in air
+let airPitch    = 0;   // accumulated pitch while in air
+
+let score  = 0;
+let isDead = false;
+
+const hazards = [], gems = [], ramps = [];
+const scoreEl   = document.getElementById('score');
+const gameoverEl = document.getElementById('gameover');
+
+// ─── WORLD ───────────────────────────────────────────────────────────────────
+function clearWorld() {
+    [...hazards, ...gems, ...ramps].forEach(o => scene.remove(o));
+    hazards.length = gems.length = ramps.length = 0;
+}
+
+function createWorld() {
+    clearWorld();
+    for (let i = 0; i < 110; i++) {
+        const z   = -60 - i * 42;
+
+        // Barrier with a gap
+        if (Math.random() > 0.3) {
+            const gapX = (Math.random() - 0.5) * 12;
+            const mat  = new THREE.MeshPhongMaterial({ color: 0xff3300 });
+            const geo  = new THREE.BoxGeometry(7, 1.4, 0.8);
+            const h1   = new THREE.Mesh(geo, mat);
+            h1.position.set(gapX - 7, 0.7, z);
+            scene.add(h1); hazards.push(h1);
+            const h2 = new THREE.Mesh(geo, mat);
+            h2.position.set(gapX + 7, 0.7, z);
+            scene.add(h2); hazards.push(h2);
         }
-    </script>
 
-    <script type="module">
-        import * as THREE from 'three';
-
-        // --- SETUP ---
-        const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x87ceeb);
-        scene.fog = new THREE.Fog(0x87ceeb, 40, 200);
-
-        const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.shadowMap.enabled = true;
-        document.body.appendChild(renderer.domElement);
-
-        // --- HILL ---
-        // The road slopes downward as Z decreases (car travels in -Z direction)
-        // Ground height: y = z * hillSlope  (z is negative ahead, so y drops)
-        const hillSlope = 0.10;
-        const getGroundY = (z) => z * hillSlope;
-
-        // --- ROAD TEXTURE ---
-        const roadCanvas = document.createElement('canvas');
-        roadCanvas.width = 128; roadCanvas.height = 512;
-        const ctx = roadCanvas.getContext('2d');
-        ctx.fillStyle = '#444'; ctx.fillRect(0, 0, 128, 512);
-        ctx.strokeStyle = '#fff'; ctx.setLineDash([40, 40]); ctx.lineWidth = 4;
-        ctx.beginPath(); ctx.moveTo(64, 0); ctx.lineTo(64, 512); ctx.stroke();
-        const roadTexture = new THREE.CanvasTexture(roadCanvas);
-        roadTexture.wrapS = roadTexture.wrapT = THREE.RepeatWrapping;
-        roadTexture.repeat.set(1, 200);
-
-        // We build the road as a flat plane then tilt it
-        const roadLength = 5000;
-        const floor = new THREE.Mesh(
-            new THREE.PlaneGeometry(20, roadLength),
-            new THREE.MeshPhongMaterial({ map: roadTexture })
-        );
-        // Rotate flat then tilt by hillSlope angle
-        floor.rotation.x = -Math.PI / 2;
-        floor.rotation.y = 0;
-        // Position so it starts at z=0 and goes to z=-roadLength
-        floor.position.set(0, 0, -roadLength / 2);
-        // Tilt the whole floor group
-        const floorGroup = new THREE.Group();
-        floorGroup.add(floor);
-
-        const grass = new THREE.Mesh(
-            new THREE.PlaneGeometry(300, roadLength),
-            new THREE.MeshPhongMaterial({ color: 0x2d8a2d })
-        );
-        grass.rotation.x = -Math.PI / 2;
-        grass.position.set(0, -0.02, -roadLength / 2);
-        floorGroup.add(grass);
-
-        // Tilt the floor group to create the hill
-        floorGroup.rotation.x = Math.atan(hillSlope);
-        scene.add(floorGroup);
-
-        // --- LIGHTING ---
-        const sun = new THREE.DirectionalLight(0xffffff, 1.3);
-        sun.position.set(30, 80, 30);
-        sun.castShadow = true;
-        scene.add(sun);
-        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-
-        // --- PLAYER CAR ---
-        const playerGroup = new THREE.Group();
-
-        const carBody = new THREE.Mesh(
-            new THREE.BoxGeometry(1.2, 0.45, 2.2),
-            new THREE.MeshPhongMaterial({ color: 0xff2222 })
-        );
-        carBody.castShadow = true;
-        playerGroup.add(carBody);
-
-        const cabin = new THREE.Mesh(
-            new THREE.BoxGeometry(0.9, 0.42, 1.1),
-            new THREE.MeshPhongMaterial({ color: 0x222244 })
-        );
-        cabin.position.set(0, 0.43, -0.15);
-        playerGroup.add(cabin);
-
-        // Windshield tint
-        const windshield = new THREE.Mesh(
-            new THREE.BoxGeometry(0.85, 0.35, 0.08),
-            new THREE.MeshPhongMaterial({ color: 0x88aaff, transparent: true, opacity: 0.6 })
-        );
-        windshield.position.set(0, 0.48, 0.4);
-        playerGroup.add(windshield);
-
-        const wheels = [];
-        const wheelPositions = [
-            [ 0.68, -0.18,  0.75],
-            [-0.68, -0.18,  0.75],
-            [ 0.68, -0.18, -0.75],
-            [-0.68, -0.18, -0.75],
-        ];
-        wheelPositions.forEach(p => {
-            const w = new THREE.Mesh(
-                new THREE.CylinderGeometry(0.28, 0.28, 0.28, 14),
-                new THREE.MeshPhongMaterial({ color: 0x111111 })
+        // Ramp — flat box tilted so the far edge is higher (launches car up)
+        if (Math.random() > 0.68) {
+            const rx = (Math.random() - 0.5) * 13;
+            const r  = new THREE.Mesh(
+                new THREE.BoxGeometry(4.5, 0.5, 6),
+                new THREE.MeshPhongMaterial({ color: 0xffcc00 })
             );
-            w.rotation.z = Math.PI / 2;
-            w.position.set(...p);
-            w.castShadow = true;
-            playerGroup.add(w);
-            wheels.push(w);
-        });
-
-        scene.add(playerGroup);
-
-        // --- PHYSICS STATE ---
-        let pos = new THREE.Vector3(0, 0.3, 0);
-        let velZ = 0;   // forward/back speed (negative = downhill/forward)
-        let velX = 0;   // lateral speed
-        let velY = 0;   // vertical speed
-        let carHeading = 0; // yaw in radians
-        let isGrounded = true;
-        let score = 0;
-        let isDead = false;
-
-        const hazards = [], gems = [], ramps = [];
-
-        // --- WORLD GENERATION ---
-        function clearWorld() {
-            [...hazards, ...gems, ...ramps].forEach(o => scene.remove(o));
-            hazards.length = 0;
-            gems.length = 0;
-            ramps.length = 0;
+            // rotation.x > 0 lifts the front (near) edge — car hits it and flies up
+            r.position.set(rx, 0.3, z - 4);
+            r.rotation.x = -0.32;
+            scene.add(r); ramps.push(r);
         }
 
-        function createWorld() {
-            clearWorld();
+        // Gem
+        const g = new THREE.Mesh(
+            new THREE.OctahedronGeometry(0.6),
+            new THREE.MeshPhongMaterial({ color: 0x00eeff, emissive: 0x003355 })
+        );
+        g.position.set((Math.random() - 0.5) * 15, 1.2, z - 20);
+        scene.add(g); gems.push(g);
+    }
+}
+createWorld();
 
-            for (let i = 0; i < 100; i++) {
-                const z = -50 - i * 40;
-                const gy = getGroundY(z);
+// ─── INPUT ───────────────────────────────────────────────────────────────────
+const keys = {};
+window.addEventListener('keydown', e => {
+    keys[e.code] = true;
+    if (e.code === 'Space' && isGrounded && !isDead) {
+        velY       = 0.42;
+        isGrounded = false;
+        airYaw     = 0;
+        airPitch   = 0;
+        airYawVel  = 0;
+        airPitchVel = 0;
+    }
+    if (e.code === 'KeyR') restart();
+});
+window.addEventListener('keyup', e => { keys[e.code] = false; });
 
-                // --- Hazard barrier ---
-                if (Math.random() > 0.35) {
-                    const gap = (Math.random() - 0.5) * 10; // gap position
-                    // Left block
-                    const h1 = new THREE.Mesh(
-                        new THREE.BoxGeometry(6, 1.2, 0.7),
-                        new THREE.MeshPhongMaterial({ color: 0xff3300 })
-                    );
-                    h1.position.set(gap - 5, gy + 0.6, z);
-                    scene.add(h1);
-                    hazards.push(h1);
-                    // Right block
-                    const h2 = new THREE.Mesh(
-                        new THREE.BoxGeometry(6, 1.2, 0.7),
-                        new THREE.MeshPhongMaterial({ color: 0xff3300 })
-                    );
-                    h2.position.set(gap + 5, gy + 0.6, z);
-                    scene.add(h2);
-                    hazards.push(h2);
-                }
+// ─── RESTART ─────────────────────────────────────────────────────────────────
+function restart() {
+    pos.set(0, 0.3, 0);
+    speed = velX = velY = heading = 0;
+    airYaw = airPitch = airYawVel = airPitchVel = 0;
+    isGrounded = true;
+    isDead     = false;
+    score      = 0;
+    scoreEl.innerText   = 0;
+    gameoverEl.style.display = 'none';
+    createWorld();
+}
 
-                // --- Ramp ---
-                if (Math.random() > 0.72) {
-                    const rx = (Math.random() - 0.5) * 12;
-                    const r = new THREE.Mesh(
-                        new THREE.BoxGeometry(4, 0.7, 5),
-                        new THREE.MeshPhongMaterial({ color: 0xffcc00 })
-                    );
-                    r.position.set(rx, gy + 0.05, z - 5);
-                    // Tilt ramp so front edge is higher (launches car upward)
-                    r.rotation.x = 0.28;
-                    scene.add(r);
-                    ramps.push(r);
-                }
+function die() {
+    if (isDead) return;
+    isDead = true;
+    gameoverEl.style.display = 'block';
+}
 
-                // --- Gem ---
-                const gx = (Math.random() - 0.5) * 14;
-                const g = new THREE.Mesh(
-                    new THREE.OctahedronGeometry(0.55),
-                    new THREE.MeshPhongMaterial({ color: 0x00eeff, emissive: 0x003344 })
-                );
-                g.position.set(gx, gy + 1.4, z - 18);
-                scene.add(g);
-                gems.push(g);
-            }
+// ─── CAMERA STATE ────────────────────────────────────────────────────────────
+const camPos = new THREE.Vector3(0, 6, 14);
+
+// ─── ANIMATE ─────────────────────────────────────────────────────────────────
+function animate() {
+    requestAnimationFrame(animate);
+    if (isDead) { renderer.render(scene, camera); return; }
+
+    // ── Tuning constants ──────────────────────────────────────────────────────
+    const GRAVITY       = 0.024;
+    const HILL_PULL     = 0.011;   // constant forward acceleration (downhill feel)
+    const ACCEL         = 0.014;
+    const BRAKE         = 0.022;
+    const TURN_SPEED    = 0.052;   // ground turn rate
+    const DRIFT_LERP    = 0.13;
+    const FWD_FRICTION  = 0.993;
+    const LAT_FRICTION  = 0.84;
+    const MAX_SPEED     = 0.95;
+    const AIR_SPIN_ACCEL = 0.018;  // how fast spin builds in air
+    const AIR_SPIN_MAX   = 0.18;   // max spin speed
+    const AIR_SPIN_DAMP  = 0.97;   // spin damping while key held
+    const GROUND_Y       = 0.3;    // car rests at y=0.3 (half-height off floor)
+
+    if (isGrounded) {
+        // ── Ground physics ────────────────────────────────────────────────────
+        speed += HILL_PULL;
+        if (keys['KeyW']) speed += ACCEL;
+        if (keys['KeyS']) speed -= BRAKE;
+        speed = THREE.MathUtils.clamp(speed, -0.25, MAX_SPEED);
+        speed *= FWD_FRICTION;
+
+        // Steering — heading rotates freely, no clamp
+        if (keys['KeyA']) heading += TURN_SPEED * (0.4 + Math.abs(speed));
+        if (keys['KeyD']) heading -= TURN_SPEED * (0.4 + Math.abs(speed));
+
+        // Forward direction vector from heading
+        const fwdX = Math.sin(heading);
+        const fwdZ = -Math.cos(heading);
+
+        // Target lateral velocity = component of forward motion
+        const targetVelX = fwdX * speed;
+        velX = THREE.MathUtils.lerp(velX, targetVelX, DRIFT_LERP);
+        velX *= LAT_FRICTION;
+
+        pos.x += velX;
+        pos.z += fwdZ * speed;
+
+        // Reset air rotation
+        airYaw   = 0;
+        airPitch = 0;
+        airYawVel   = 0;
+        airPitchVel = 0;
+
+    } else {
+        // ── Air physics ───────────────────────────────────────────────────────
+        // Gravity
+        velY -= GRAVITY;
+
+        // Air spin — A/D = yaw (360s), W/S = pitch (flips)
+        if (keys['KeyA']) airYawVel = Math.min(airYawVel + AIR_SPIN_ACCEL, AIR_SPIN_MAX);
+        else if (keys['KeyD']) airYawVel = Math.max(airYawVel - AIR_SPIN_ACCEL, -AIR_SPIN_MAX);
+        else airYawVel *= AIR_SPIN_DAMP;
+
+        if (keys['KeyW']) airPitchVel = Math.min(airPitchVel + AIR_SPIN_ACCEL, AIR_SPIN_MAX);
+        else if (keys['KeyS']) airPitchVel = Math.max(airPitchVel - AIR_SPIN_ACCEL, -AIR_SPIN_MAX);
+        else airPitchVel *= AIR_SPIN_DAMP;
+
+        airYaw   += airYawVel;
+        airPitch += airPitchVel;
+
+        // Keep moving forward in air (same heading as when jumped)
+        pos.x += velX * 0.6;
+        pos.z += -Math.cos(heading) * speed * 0.6;
+    }
+
+    // ── Vertical / ground collision ───────────────────────────────────────────
+    pos.y += velY;
+    if (pos.y <= GROUND_Y) {
+        pos.y     = GROUND_Y;
+        velY      = 0;
+        isGrounded = true;
+        // Absorb heading change from air yaw so car keeps facing that way
+        heading  += airYaw;
+        airYaw    = 0;
+        airPitch  = 0;
+    }
+
+    // Road boundary (soft wall)
+    if (Math.abs(pos.x) > 10) {
+        pos.x    = Math.sign(pos.x) * 10;
+        velX    *= -0.3;
+        heading *= 0.5;
+    }
+
+    // ── Car visual transform ──────────────────────────────────────────────────
+    carGroup.position.copy(pos);
+
+    if (isGrounded) {
+        // On ground: yaw = heading, slight body roll
+        carGroup.rotation.set(0, heading, -velX * 0.55);
+    } else {
+        // In air: apply free pitch + yaw spins on top of heading
+        const euler = new THREE.Euler(airPitch, heading + airYaw, -velX * 0.3, 'YXZ');
+        carGroup.rotation.copy(euler);
+    }
+
+    // Wheel spin based on speed
+    wheels.forEach(w => w.rotation.x -= speed * 2.8);
+
+    // ── Camera ───────────────────────────────────────────────────────────────
+    // Sit behind and slightly above, tilted down to fake the hill perspective
+    const targetCamPos = new THREE.Vector3(
+        pos.x * 0.25,
+        pos.y + 5.5,
+        pos.z + 15
+    );
+    camPos.lerp(targetCamPos, 0.1);
+    camera.position.copy(camPos);
+    // Look slightly ahead of car and slightly downward (gives downhill illusion)
+    camera.lookAt(pos.x * 0.4, pos.y - 1.5, pos.z - 12);
+
+    // ── Collisions ───────────────────────────────────────────────────────────
+    for (const h of hazards) {
+        const dx = Math.abs(pos.x - h.position.x);
+        const dz = Math.abs(pos.z - h.position.z);
+        if (dx < 1.4 && dz < 1.1) { die(); break; }
+    }
+
+    ramps.forEach(r => {
+        const dx = Math.abs(pos.x - r.position.x);
+        const dz = Math.abs(pos.z - r.position.z);
+        if (dx < 2.2 && dz < 3.0 && isGrounded) {
+            velY       = 0.58;
+            isGrounded = false;
+            airYaw     = 0;
+            airPitch   = 0;
+            airYawVel  = 0;
+            airPitchVel = 0;
         }
+    });
 
-        createWorld();
-
-        // --- INPUT ---
-        const keys = {};
-        window.addEventListener('keydown', e => {
-            keys[e.code] = true;
-            if (e.code === 'Space' && isGrounded && !isDead) {
-                velY = 0.38;
-                isGrounded = false;
-            }
-            if (e.code === 'KeyR') restart();
-        });
-        window.addEventListener('keyup', e => keys[e.code] = false);
-
-        // --- RESTART ---
-        function restart() {
-            pos.set(0, 0.3, 0);
-            velZ = 0; velX = 0; velY = 0;
-            carHeading = 0;
-            score = 0;
-            isDead = false;
-            document.getElementById('score').innerText = 0;
-            document.getElementById('gameover').style.display = 'none';
-            createWorld();
+    gems.forEach((g, i) => {
+        g.rotation.y += 0.05;
+        if (pos.distanceTo(g.position) < 1.9) {
+            scene.remove(g);
+            gems.splice(i, 1);
+            score += 100;
+            scoreEl.innerText = score;
         }
+    });
 
-        function die() {
-            if (isDead) return;
-            isDead = true;
-            document.getElementById('gameover').style.display = 'block';
-        }
+    // End of track
+    if (pos.z < -(ROAD_LENGTH - 100)) restart();
 
-        // --- MAIN LOOP ---
-        const clock = new THREE.Clock();
+    renderer.render(scene, camera);
+}
 
-        function animate() {
-            requestAnimationFrame(animate);
-            const dt = Math.min(clock.getDelta(), 0.05); // cap delta
+window.addEventListener('resize', () => {
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+});
 
-            if (!isDead) {
-                // ---- Physics ----
-                const gravity = 0.022;
-                const hillPull = 0.009;     // constant downhill acceleration
-                const accel = 0.012;
-                const brakeForce = 0.018;
-                const turnSpeed = 0.048;
-                const lateralFriction = 0.88;
-                const forwardFriction = 0.992;
-
-                // Gravity
-                velY -= gravity;
-
-                if (isGrounded) {
-                    // Constant hill pull (forward = negative Z)
-                    velZ -= hillPull;
-
-                    // Player controls
-                    if (keys['KeyW']) velZ -= accel;
-                    if (keys['KeyS']) velZ += brakeForce * 0.6; // brake/slow
-
-                    // Steering — turn car heading
-                    if (keys['KeyA']) carHeading += turnSpeed;
-                    if (keys['KeyD']) carHeading -= turnSpeed;
-
-                    // Clamp heading so car can't fully U-turn
-                    carHeading = THREE.MathUtils.clamp(carHeading, -Math.PI * 0.45, Math.PI * 0.45);
-
-                    // Lateral velocity from steering
-                    const targetVelX = Math.sin(carHeading) * Math.abs(velZ) * 1.1;
-                    velX = THREE.MathUtils.lerp(velX, targetVelX, 0.12);
-                } else {
-                    // Air steering (subtle)
-                    if (keys['KeyA']) carHeading += turnSpeed * 0.4;
-                    if (keys['KeyD']) carHeading -= turnSpeed * 0.4;
-                }
-
-                // Friction
-                velX *= lateralFriction;
-                velZ *= forwardFriction;
-
-                // Clamp max speed
-                velZ = THREE.MathUtils.clamp(velZ, -0.8, 0.3);
-
-                // Integrate position
-                pos.x += velX;
-                pos.z += velZ;
-                pos.y += velY;
-
-                // Keep car on the road (soft wall)
-                if (Math.abs(pos.x) > 9.5) {
-                    pos.x = Math.sign(pos.x) * 9.5;
-                    velX *= -0.4;
-                    carHeading *= 0.5;
-                }
-
-                // ---- Ground collision ----
-                const groundY = getGroundY(pos.z) + 0.28;
-                if (pos.y <= groundY) {
-                    pos.y = groundY;
-                    if (velY < 0) velY = 0;
-                    isGrounded = true;
-                } else {
-                    isGrounded = false;
-                }
-
-                // ---- Update car visuals ----
-                playerGroup.position.copy(pos);
-
-                // Tilt car body with hill
-                playerGroup.rotation.x = -Math.atan(hillSlope);
-                // Yaw (steering)
-                playerGroup.rotation.y = carHeading;
-                // Body roll when turning
-                playerGroup.rotation.z = -velX * 0.6;
-
-                // Wheel spin
-                wheels.forEach(w => w.rotation.x -= velZ * 2.5);
-
-                // ---- Camera ----
-                const behindOffset = new THREE.Vector3(
-                    pos.x * 0.3,
-                    pos.y + 4.5,
-                    pos.z + 14
-                );
-                camera.position.lerp(behindOffset, 0.1);
-                camera.lookAt(pos.x * 0.5, pos.y + 0.5, pos.z - 8);
-
-                // ---- Collisions ----
-                hazards.forEach(h => {
-                    const dx = Math.abs(pos.x - h.position.x);
-                    const dz = Math.abs(pos.z - h.position.z);
-                    if (dx < 1.5 && dz < 1.2) die();
-                });
-
-                ramps.forEach(r => {
-                    const dx = Math.abs(pos.x - r.position.x);
-                    const dz = Math.abs(pos.z - r.position.z);
-                    if (dx < 2.0 && dz < 2.5 && isGrounded) {
-                        velY = 0.52;
-                        velZ -= 0.04; // forward boost on launch
-                        isGrounded = false;
-                    }
-                });
-
-                gems.forEach((g, i) => {
-                    g.rotation.y += 0.04;
-                    if (pos.distanceTo(g.position) < 1.8) {
-                        scene.remove(g);
-                        gems.splice(i, 1);
-                        score += 100;
-                        document.getElementById('score').innerText = score;
-                    }
-                });
-
-                // End of track
-                if (pos.z < -4000) restart();
-            }
-
-            renderer.render(scene, camera);
-        }
-
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
-
-        animate();
-    </script>
+animate();
+</script>
 </body>
 </html>
