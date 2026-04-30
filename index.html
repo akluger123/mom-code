@@ -29,7 +29,7 @@
 </head>
 <body>
     <div id="ui">Score: <span id="score">0</span></div>
-    <div id="instructions">WASD to Move/Air-Tricks | SPACE to Jump | Yellow Ramps Fly!</div>
+    <div id="instructions">WASD to Move | SPACE to Jump | Yellow Ramps Fly!</div>
 
     <script type="importmap">
         {
@@ -54,7 +54,8 @@
         document.body.appendChild(renderer.domElement);
 
         // --- CONSTANTS ---
-        const hillAngle = 0.12;
+        const hillAngle = 0.12; 
+        // Accurate ground Y based on Z rotation of the plane
         const getGroundY = (z) => -z * Math.tan(hillAngle);
 
         // --- ROAD ---
@@ -71,13 +72,13 @@
 
         const floor = new THREE.Mesh(new THREE.PlaneGeometry(20, 4000), new THREE.MeshPhongMaterial({ map: roadTexture }));
         floor.rotation.x = -Math.PI / 2 - hillAngle;
-        floor.position.set(0, getGroundY(1000), -1000 * Math.cos(hillAngle));
+        floor.position.set(0, 0, 0); // Origin at top
         floor.receiveShadow = true;
         scene.add(floor);
 
         const grass = new THREE.Mesh(new THREE.PlaneGeometry(200, 4000), new THREE.MeshPhongMaterial({ color: 0x228b22 }));
         grass.rotation.x = -Math.PI / 2 - hillAngle;
-        grass.position.set(0, getGroundY(1000) - 0.1, -1000 * Math.cos(hillAngle));
+        grass.position.set(0, -0.05, 0);
         scene.add(grass);
 
         // --- LIGHTING ---
@@ -110,9 +111,11 @@
         playerPivot.add(carModel);
         scene.add(playerPivot);
 
-        // --- GAME STATE ---
-        let pos = new THREE.Vector3(0, 0.5, 0);
+        // --- PHYSICS STATE (Deadline Delivery Style) ---
+        let pos = new THREE.Vector3(0, 0.4, 0);
         let vel = new THREE.Vector3(0, 0, 0);
+        let carHeading = 0; // The direction car is pointing (radians)
+        let driftAngle = 0;
         let isGrounded = true;
         let score = 0;
         const hazards = [];
@@ -126,10 +129,10 @@
             });
 
             for (let i = 0; i < 80; i++) {
-                const z = -40 - (i * 30);
+                const z = -40 - (i * 35);
                 const groundY = getGroundY(z);
 
-                // Hazards (Barriers)
+                // Hazards
                 if (Math.random() > 0.4) {
                     const h = new THREE.Mesh(new THREE.BoxGeometry(5, 1, 0.5), new THREE.MeshPhongMaterial({ color: 0xff4400 }));
                     h.position.set((Math.random() - 0.5) * 15, groundY + 0.5, z);
@@ -138,11 +141,11 @@
                     hazards.push(h);
                 }
 
-                // Ramps
-                if (Math.random() > 0.7) {
-                    const r = new THREE.Mesh(new THREE.BoxGeometry(4, 0.5, 3), new THREE.MeshPhongMaterial({ color: 0xffcc00 }));
-                    r.position.set((Math.random() - 0.5) * 12, groundY + 0.1, z - 10);
-                    r.rotation.x = -hillAngle - 0.4; // Tilted up relative to slope
+                // Ramps (Fixed rotation: tilted towards player)
+                if (Math.random() > 0.75) {
+                    const r = new THREE.Mesh(new THREE.BoxGeometry(4, 0.8, 4), new THREE.MeshPhongMaterial({ color: 0xffcc00 }));
+                    r.position.set((Math.random() - 0.5) * 10, groundY + 0.1, z - 10);
+                    r.rotation.x = -hillAngle + 0.35; // Positive tilt to point up towards player
                     scene.add(r);
                     ramps.push(r);
                 }
@@ -160,7 +163,7 @@
         window.addEventListener('keydown', (e) => {
             keys[e.code] = true;
             if (e.code === 'Space' && isGrounded) {
-                vel.y = 0.5;
+                vel.y = 0.45;
                 isGrounded = false;
             }
         });
@@ -169,6 +172,7 @@
         function restart() {
             pos.set(0, 0.5, 0);
             vel.set(0, 0, 0);
+            carHeading = 0;
             carModel.rotation.set(0, 0, 0);
             score = 0;
             document.getElementById('score').innerText = score;
@@ -178,47 +182,65 @@
         function animate() {
             requestAnimationFrame(animate);
 
-            // Gravity & Slope Push
-            vel.y -= 0.015;
-            vel.z -= 0.005;
+            // Driving Physics (Deadline Delivery inspired)
+            const accel = 0.008;
+            const turnSpeed = 0.045;
+            const friction = 0.985;
+            const gravity = 0.015;
 
+            // Apply Gravity & Hill force
+            vel.y -= gravity;
             if (isGrounded) {
-                // Ground Control
-                if (keys['KeyA'] || keys['ArrowLeft']) vel.x -= 0.03;
-                if (keys['KeyD'] || keys['ArrowRight']) vel.x += 0.03;
+                vel.z -= 0.006; // Downhill constant pull
                 
-                // Align to ground visuals
-                carModel.rotation.x = THREE.MathUtils.lerp(carModel.rotation.x, 0, 0.1);
-                carModel.rotation.y = THREE.MathUtils.lerp(carModel.rotation.y, 0, 0.1);
-                carModel.rotation.z = THREE.MathUtils.lerp(carModel.rotation.z, -vel.x * 0.5, 0.1);
+                // Acceleration / Decel
+                if (keys['KeyW']) vel.z -= accel;
+                if (keys['KeyS']) vel.z += accel;
+
+                // Steering
+                if (keys['KeyA']) carHeading += turnSpeed;
+                if (keys['KeyD']) carHeading -= turnSpeed;
+
+                // Convert heading to X velocity (drifting effect)
+                const targetVelX = Math.sin(carHeading) * Math.abs(vel.z);
+                vel.x = THREE.MathUtils.lerp(vel.x, targetVelX, 0.1);
             } else {
-                // Air Tricks
-                if (keys['KeyW']) carModel.rotation.x -= 0.15; // Frontflip
-                if (keys['KeyS']) carModel.rotation.x += 0.15; // Backflip
-                if (keys['KeyA']) carModel.rotation.y += 0.12; // Flat spin
-                if (keys['KeyD']) carModel.rotation.y -= 0.12;
+                // Air physics
+                if (keys['KeyA']) carModel.rotation.y += 0.1;
+                if (keys['KeyD']) carModel.rotation.y -= 0.1;
             }
 
-            vel.x *= 0.95;
+            // Friction
+            vel.x *= friction;
             vel.z *= 0.99;
+
+            // Move
             pos.add(vel);
 
-            // Slope Collision
-            const groundLimit = getGroundY(pos.z) + 0.4;
-            if (pos.y < groundLimit) {
-                pos.y = groundLimit;
-                if (vel.y < 0) vel.y = -vel.z * Math.tan(hillAngle); // Maintain slope velocity
+            // Ground Collision (Precise alignment)
+            const groundY = getGroundY(pos.z) + 0.4;
+            if (pos.y <= groundY) {
+                pos.y = groundY;
+                if (vel.y < 0) vel.y = 0;
                 isGrounded = true;
+                
+                // Align Car visuals to ground
+                carModel.rotation.x = THREE.MathUtils.lerp(carModel.rotation.x, 0, 0.1);
+                carModel.rotation.y = THREE.MathUtils.lerp(carModel.rotation.y, carHeading, 0.2);
+                carModel.rotation.z = THREE.MathUtils.lerp(carModel.rotation.z, -vel.x * 0.5, 0.1);
             } else {
                 isGrounded = false;
             }
 
             playerPivot.position.copy(pos);
-            playerPivot.rotation.x = -hillAngle;
-            wheels.forEach(w => w.rotation.x += vel.z * 2);
+            playerPivot.rotation.x = -hillAngle; // Group tilts with hill
+            
+            // Wheel spin
+            wheels.forEach(w => w.rotation.x += vel.z * 1.5);
 
-            // Camera
-            camera.position.lerp(new THREE.Vector3(pos.x * 0.5, pos.y + 4, pos.z + 10), 0.1);
+            // Camera follow
+            const camOffset = new THREE.Vector3(pos.x * 0.5, pos.y + 4, pos.z + 12);
+            camera.position.lerp(camOffset, 0.1);
             camera.lookAt(pos.x, pos.y, pos.z - 5);
 
             // Collisions
@@ -229,8 +251,10 @@
             ramps.forEach(r => {
                 const dx = Math.abs(pos.x - r.position.x);
                 const dz = Math.abs(pos.z - r.position.z);
-                if (dx < 2.5 && dz < 1.5 && isGrounded) {
-                    vel.y = 0.6; // Launch!
+                // Wider check for ramps
+                if (dx < 2.2 && dz < 2.0 && isGrounded) {
+                    vel.y = 0.55;
+                    vel.z -= 0.05; // Extra boost
                     isGrounded = false;
                 }
             });
@@ -245,7 +269,7 @@
                 }
             });
 
-            if (pos.z < -2500) restart();
+            if (pos.z < -2800) restart();
 
             renderer.render(scene, camera);
         }
