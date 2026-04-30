@@ -45,7 +45,7 @@
         // --- SETUP ---
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x87ceeb);
-        scene.fog = new THREE.Fog(0x87ceeb, 20, 100);
+        scene.fog = new THREE.Fog(0x87ceeb, 20, 150);
 
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -79,6 +79,7 @@
         playerGroup.add(cabin);
 
         // Wheels
+        const wheels = [];
         const wheelGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.2, 12);
         const wheelMat = new THREE.MeshPhongMaterial({ color: 0x222222 });
         const wheelPos = [[0.6, -0.2, 0.7], [-0.6, -0.2, 0.7], [0.6, -0.2, -0.7], [-0.6, -0.2, -0.7]];
@@ -87,51 +88,63 @@
             w.rotation.z = Math.PI / 2;
             w.position.set(p[0], p[1], p[2]);
             playerGroup.add(w);
+            wheels.push(w);
         });
 
         scene.add(playerGroup);
 
         // --- PHYSICS VARIABLES ---
-        let pos = new THREE.Vector3(0, 1, 0);
+        const hillAngle = 0.18; // Slightly steeper
+        let pos = new THREE.Vector3(0, 0, 0);
         let vel = new THREE.Vector3(0, 0, 0);
-        const gravity = -0.015;
-        const jumpStrength = 0.35;
+        const gravity = -0.012;
+        const jumpStrength = 0.25;
         let isGrounded = false;
         let score = 0;
-        const hillAngle = 0.15; // 10 degrees slope
+
+        // Function to get ground Y at a specific Z
+        function getGroundHeight(z) {
+            return -z * Math.tan(hillAngle);
+        }
+
+        // Initialize position correctly on the slope
+        pos.y = getGroundHeight(0) + 0.5;
 
         // --- WORLD ---
-        const floorGroup = new THREE.Group();
-        const floorGeo = new THREE.PlaneGeometry(20, 1000);
+        const floorGeo = new THREE.PlaneGeometry(30, 2000);
         const floorMat = new THREE.MeshPhongMaterial({ color: 0x33aa33 });
         const floor = new THREE.Mesh(floorGeo, floorMat);
+        // Pivot from the top so it rotates downward into the distance
         floor.rotation.x = -Math.PI / 2 - hillAngle;
+        floor.position.z = -1000 * Math.cos(hillAngle);
+        floor.position.y = getGroundHeight(1000);
         floor.receiveShadow = true;
-        floorGroup.add(floor);
-        scene.add(floorGroup);
+        scene.add(floor);
 
         // --- HAZARDS & GEMS ---
         const hazards = [];
         const gems = [];
         
         function spawnHazards() {
-            // Roadblocks
-            for(let i=0; i<40; i++) {
+            for(let i=0; i<60; i++) {
+                const zPos = -i * 20 - 20;
+                
+                // Roadblocks
                 const hGeo = new THREE.BoxGeometry(3, 1, 0.5);
                 const hMat = new THREE.MeshPhongMaterial({ color: 0xffaa00 });
                 const h = new THREE.Mesh(hGeo, hMat);
-                h.position.set((Math.random() - 0.5) * 15, -i*15 * Math.sin(hillAngle), -i*15);
+                h.position.set((Math.random() - 0.5) * 15, getGroundHeight(zPos) + 0.5, zPos);
                 h.rotation.x = -hillAngle;
                 h.castShadow = true;
                 scene.add(h);
                 hazards.push(h);
-            }
-            // Gems
-            for(let i=0; i<30; i++) {
+
+                // Gems
                 const gGeo = new THREE.OctahedronGeometry(0.5);
                 const gMat = new THREE.MeshPhongMaterial({ color: 0xffff00, emissive: 0x555500 });
                 const g = new THREE.Mesh(gGeo, gMat);
-                g.position.set((Math.random() - 0.5) * 15, -i*25 * Math.sin(hillAngle) + 1, -i*25);
+                const gz = zPos - 10;
+                g.position.set((Math.random() - 0.5) * 15, getGroundHeight(gz) + 1.2, gz);
                 scene.add(g);
                 gems.push(g);
             }
@@ -150,7 +163,7 @@
         window.addEventListener('keyup', (e) => keys[e.code] = false);
 
         function restart() {
-            pos.set(0, 2, 0);
+            pos.set(0, 0.5, 0);
             vel.set(0, 0, 0);
             score = 0;
             document.getElementById('score').innerText = score;
@@ -160,48 +173,55 @@
         function animate() {
             requestAnimationFrame(animate);
 
-            // 1. Apply Downhill Acceleration
-            vel.z -= 0.005; 
+            // 1. Gravity & Hill Physics
+            vel.y += gravity;
+            
+            // Artificial "gravity" pulling the car down the slope
+            vel.z -= 0.006; 
             
             // 2. Controls
-            if (keys['ArrowLeft'] || keys['KeyA']) vel.x -= 0.01;
-            if (keys['ArrowRight'] || keys['KeyD']) vel.x += 0.01;
+            if (keys['ArrowLeft'] || keys['KeyA']) vel.x -= 0.015;
+            if (keys['ArrowRight'] || keys['KeyD']) vel.x += 0.015;
             
             // Friction
-            vel.x *= 0.95;
-            vel.z *= 0.98;
+            vel.x *= 0.92;
+            vel.z *= 0.99;
             
-            // 3. Gravity
-            vel.y += gravity;
             pos.add(vel);
 
-            // 4. Collision with Hill (The Floor)
-            const floorY = -pos.z * Math.tan(hillAngle);
-            if (pos.y < floorY + 0.5) {
-                pos.y = floorY + 0.5;
-                vel.y = 0;
+            // 3. Stick to Hill Surface
+            const groundY = getGroundHeight(pos.z);
+            if (pos.y < groundY + 0.5) {
+                pos.y = groundY + 0.5;
+                // If moving along ground, adjust Y velocity to match slope to stop "jitter"
+                // This makes it look like it's actually rolling down
+                vel.y = -vel.z * Math.tan(hillAngle); 
                 isGrounded = true;
+            } else {
+                isGrounded = false;
             }
 
-            // 5. Update Car Object
+            // 4. Update Car Object
             playerGroup.position.copy(pos);
-            playerGroup.rotation.x = -hillAngle; // Align to slope
-            playerGroup.rotation.y = -vel.x * 2; // Lean into turns
+            playerGroup.rotation.x = -hillAngle; 
+            playerGroup.rotation.y = -vel.x * 2;
             playerGroup.rotation.z = -vel.x * 1.5;
 
-            // 6. Camera follow
+            // Spin wheels based on speed
+            wheels.forEach(w => w.rotation.x += vel.z * 2);
+
+            // 5. Camera follow
             camera.position.set(pos.x, pos.y + 4, pos.z + 8);
             camera.lookAt(pos.x, pos.y, pos.z - 5);
 
-            // 7. Hazard Collision (Lose State)
+            // 6. Hazard Collision
             hazards.forEach(h => {
-                const dist = playerGroup.position.distanceTo(h.position);
-                if (dist < 1.8) {
+                if (playerGroup.position.distanceTo(h.position) < 1.8) {
                     restart();
                 }
             });
 
-            // 8. Gem Collection
+            // 7. Gem Collection
             gems.forEach((g, idx) => {
                 g.rotation.y += 0.05;
                 if (playerGroup.position.distanceTo(g.position) < 1.5) {
@@ -212,10 +232,10 @@
                 }
             });
 
-            // 9. Infinite Loop logic (teleport back up but keep score if they reach end)
-            if (pos.z < -600) {
+            // 8. Infinite Loop logic
+            if (pos.z < -1000) {
                 pos.z = 0;
-                pos.y = 2;
+                pos.y = getGroundHeight(0) + 0.5;
             }
 
             renderer.render(scene, camera);
