@@ -1,13 +1,11 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>
-      Downhill Drift Dash!
-    </title>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Downhill Drift Dash!</title>
     <style>
-      body { margin: 0; overflow: hidden; font-family: &#39;Segoe UI&#39;, sans-serif; background: #000; }
+        body { margin: 0; overflow: hidden; font-family: 'Segoe UI', sans-serif; background: #000; }
         #ui {
             position: absolute; top: 20px; left: 20px;
             color: white; font-size: 32px; font-weight: bold;
@@ -27,33 +25,23 @@
         }
         #gameover span, #pauseMenu span { display: block; font-size: 22px; margin-top: 10px; }
     </style>
-  </head>
-  <body>
-    <div id="ui">
-      Score:
-      <span id="score">      0
-</span>
-    </div>
-    <div id="instructions">
-      W/S = Faster / Brake  |  A/D = Steer  |  SPACE = Jump
-      <br />
-      P = Pause  |  R = Restart  |  In Air: Spin/Flip
-    </div>
-    <div id="gameover">
-      CRASHED!
-      <span>      Press R to Restart
-</span>
-    </div>
-    <div id="pauseMenu">
-      PAUSED
-      <span>      Press P to Resume
-</span>
-    </div>
-    <script type="importmap">
-      { &#34;imports&#34;: { &#34;three&#34;: &#34;https://unpkg.com/three@0.160.0/build/three.module.js&#34; } }
-    </script>
-    <script type="module">
-      import * as THREE from &#39;three&#39;;
+</head>
+<body>
+<div id="ui">Score: <span id="score">0</span></div>
+<div id="instructions">
+    W/S = Faster / Brake &nbsp;|&nbsp; A/D = Steer &nbsp;|&nbsp; SPACE = Jump<br>
+    P = Pause &nbsp;|&nbsp; R = Restart &nbsp;|&nbsp; In Air: Spin/Flip
+</div>
+
+<div id="gameover">CRASHED!<span>Press R to Restart</span></div>
+<div id="pauseMenu">PAUSED<span>Press P to Resume</span></div>
+
+<script type="importmap">
+{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+</script>
+
+<script type="module">
+import * as THREE from 'three';
 
 const scene    = new THREE.Scene();
 scene.background = new THREE.Color(0x87ceeb);
@@ -74,13 +62,13 @@ scene.add(new THREE.AmbientLight(0xffffff, 0.55));
 const ROAD_LENGTH = 5000;
 const ROAD_WIDTH = 22;
 
-const roadCanvas = document.createElement(&#39;canvas&#39;);
+const roadCanvas = document.createElement('canvas');
 roadCanvas.width = 256; roadCanvas.height = 1024;
-const rc = roadCanvas.getContext(&#39;2d&#39;);
-rc.fillStyle = &#39;#3a3a3a&#39;; rc.fillRect(0, 0, 256, 1024);
-rc.strokeStyle = &#39;#ffffff&#39;; rc.setLineDash([80, 80]); rc.lineWidth = 6;
+const rc = roadCanvas.getContext('2d');
+rc.fillStyle = '#3a3a3a'; rc.fillRect(0, 0, 256, 1024);
+rc.strokeStyle = '#ffffff'; rc.setLineDash([80, 80]); rc.lineWidth = 6;
 rc.beginPath(); rc.moveTo(128, 0); rc.lineTo(128, 1024); rc.stroke();
-rc.strokeStyle = &#39;#ffff00&#39;; rc.setLineDash([]); rc.lineWidth = 5;
+rc.strokeStyle = '#ffff00'; rc.setLineDash([]); rc.lineWidth = 5;
 rc.beginPath(); rc.moveTo(8,0);   rc.lineTo(8,1024);   rc.stroke();
 rc.beginPath(); rc.moveTo(248,0); rc.lineTo(248,1024); rc.stroke();
 
@@ -115,9 +103,9 @@ grass.rotation.x = -Math.PI / 2;
 grass.position.set(0, -0.01, -ROAD_LENGTH / 2);
 scene.add(grass);
 
-for (let i = 0; i &lt; 200; i++) {
+for (let i = 0; i < 200; i++) {
     const z = -(Math.random() * ROAD_LENGTH);
-    const side = Math.random() &gt; 0.5 ? 1 : -1;
+    const side = Math.random() > 0.5 ? 1 : -1;
     const x = side * (20 + Math.random() * 30);
     const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.4, 3, 6), new THREE.MeshPhongMaterial({ color: 0x5c3a1e }));
     trunk.position.set(x, 1.5, z);
@@ -135,7 +123,7 @@ const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.42, 1.15), new THREE.M
 cabin.position.set(0, 0.43, -0.2);
 carGroup.add(cabin);
 const wheels = [];
-[[ 0.72, -0.18,  0.78], [-0.72, -0.18,  0.78], [ 0.72, -0.18, -0.78], [-0.72, -0.18, -0.78]].forEach(p =&gt; {
+[[ 0.72, -0.18,  0.78], [-0.72, -0.18,  0.78], [ 0.72, -0.18, -0.78], [-0.72, -0.18, -0.78]].forEach(p => {
     const w = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.3, 14), new THREE.MeshPhongMaterial({ color: 0x111111 }));
     w.rotation.z = Math.PI / 2; w.position.set(...p);
     carGroup.add(w); wheels.push(w);
@@ -148,14 +136,14 @@ let airYawVel = 0, airPitchVel = 0, airYaw = 0, airPitch = 0;
 let score = 0, isDead = false, isPaused = false;
 
 const hazards = [], gems = [], ramps = [];
-const scoreEl = document.getElementById(&#39;score&#39;), gameoverEl = document.getElementById(&#39;gameover&#39;), pauseEl = document.getElementById(&#39;pauseMenu&#39;);
+const scoreEl = document.getElementById('score'), gameoverEl = document.getElementById('gameover'), pauseEl = document.getElementById('pauseMenu');
 
 function createWorld() {
-    [...hazards, ...gems, ...ramps].forEach(o =&gt; scene.remove(o));
+    [...hazards, ...gems, ...ramps].forEach(o => scene.remove(o));
     hazards.length = gems.length = ramps.length = 0;
-    for (let i = 0; i &lt; 110; i++) {
+    for (let i = 0; i < 110; i++) {
         const z = -60 - i * 42;
-        if (Math.random() &gt; 0.3) {
+        if (Math.random() > 0.3) {
             const gapX = (Math.random() - 0.5) * 10;
             const geo = new THREE.BoxGeometry(8, 1.4, 0.8);
             const mat = new THREE.MeshPhongMaterial({ color: 0xff3300 });
@@ -163,7 +151,7 @@ function createWorld() {
             const h2 = new THREE.Mesh(geo, mat); h2.position.set(gapX + 7.5, 0.7, z);
             scene.add(h1, h2); hazards.push(h1, h2);
         }
-        if (Math.random() &gt; 0.6) {
+        if (Math.random() > 0.6) {
             const r = new THREE.Mesh(new THREE.BoxGeometry(4.5, 0.5, 6), new THREE.MeshPhongMaterial({ color: 0xffcc00 }));
             r.position.set((Math.random() - 0.5) * 13, 0.2, z - 4);
             r.rotation.x = -0.32; scene.add(r); ramps.push(r);
@@ -176,22 +164,22 @@ function createWorld() {
 createWorld();
 
 const keys = {};
-window.addEventListener(&#39;keydown&#39;, e =&gt; {
+window.addEventListener('keydown', e => {
     keys[e.code] = true;
-    if (e.code === &#39;Space&#39; &amp;&amp; isGrounded &amp;&amp; !isDead &amp;&amp; !isPaused) { velY = 0.45; isGrounded = false; airYaw = airPitch = airYawVel = airPitchVel = 0; }
-    if (e.code === &#39;KeyR&#39;) restart();
-    if (e.code === &#39;KeyP&#39; &amp;&amp; !isDead) {
+    if (e.code === 'Space' && isGrounded && !isDead && !isPaused) { velY = 0.45; isGrounded = false; airYaw = airPitch = airYawVel = airPitchVel = 0; }
+    if (e.code === 'KeyR') restart();
+    if (e.code === 'KeyP' && !isDead) {
         isPaused = !isPaused;
-        pauseEl.style.display = isPaused ? &#39;block&#39; : &#39;none&#39;;
+        pauseEl.style.display = isPaused ? 'block' : 'none';
     }
 });
-window.addEventListener(&#39;keyup&#39;, e =&gt; { keys[e.code] = false; });
+window.addEventListener('keyup', e => { keys[e.code] = false; });
 
 function restart() {
     pos.set(0, 0.3, 0); speed = velX = velY = heading = airYaw = airPitch = airYawVel = airPitchVel = 0;
     isGrounded = true; isDead = false; isPaused = false;
     score = 0; scoreEl.innerText = 0;
-    gameoverEl.style.display = pauseEl.style.display = &#39;none&#39;;
+    gameoverEl.style.display = pauseEl.style.display = 'none';
     createWorld();
 }
 
@@ -203,12 +191,12 @@ function animate() {
 
     if (isGrounded) {
         speed = Math.min(speed + 0.01, MAX_SPEED);
-        if (keys[&#39;KeyW&#39;]) speed += 0.01;
-        if (keys[&#39;KeyS&#39;]) speed -= 0.02;
+        if (keys['KeyW']) speed += 0.01;
+        if (keys['KeyS']) speed -= 0.02;
         
         // Fixed steering: A = Rotate Left (positive heading), D = Rotate Right (negative heading)
-        if (keys[&#39;KeyA&#39;]) heading += TURN_SPEED;
-        if (keys[&#39;KeyD&#39;]) heading -= TURN_SPEED;
+        if (keys['KeyA']) heading += TURN_SPEED;
+        if (keys['KeyD']) heading -= TURN_SPEED;
         
         heading *= 0.92;
         velX = THREE.MathUtils.lerp(velX, -heading * speed * 2.5, 0.15);
@@ -216,14 +204,14 @@ function animate() {
     } else {
         velY -= GRAVITY;
         pos.y += velY;
-        if (keys[&#39;KeyA&#39;]) airYawVel += 0.01;
-        if (keys[&#39;KeyD&#39;]) airYawVel -= 0.01;
+        if (keys['KeyA']) airYawVel += 0.01;
+        if (keys['KeyD']) airYawVel -= 0.01;
         airYaw += airYawVel;
-        if (pos.y &lt;= 0.3) {
+        if (pos.y <= 0.3) {
             pos.y = 0.3; velY = 0; isGrounded = true;
             // Check landing
             const landingFlips = Math.round(Math.abs(airYaw) / (Math.PI * 2));
-            if (landingFlips &gt; 0) { score += landingFlips * 500; scoreEl.innerText = score; }
+            if (landingFlips > 0) { score += landingFlips * 500; scoreEl.innerText = score; }
         }
     }
 
@@ -232,44 +220,44 @@ function animate() {
 
     // Track Border Constraint
     const limit = ROAD_WIDTH / 2 - 0.8;
-    if (pos.x &gt; limit) { pos.x = limit; velX *= -0.5; }
-    if (pos.x &lt; -limit) { pos.x = -limit; velX *= -0.5; }
+    if (pos.x > limit) { pos.x = limit; velX *= -0.5; }
+    if (pos.x < -limit) { pos.x = -limit; velX *= -0.5; }
 
     carGroup.position.copy(pos);
     carGroup.rotation.set(isGrounded ? 0 : airPitch, heading, isGrounded ? (velX * -0.2) : airYaw);
 
     // Collisions with Barriers
-    hazards.forEach(h =&gt; {
+    hazards.forEach(h => {
         const dx = Math.abs(pos.x - h.position.x);
         const dz = Math.abs(pos.z - h.position.z);
         // Barriers are 8 units wide, 1.4 tall, 0.8 thick
-        if (dx &lt; 4.5 &amp;&amp; dz &lt; 1.0 &amp;&amp; pos.y &lt; 1.8) isDead = true; 
+        if (dx < 4.5 && dz < 1.0 && pos.y < 1.8) isDead = true; 
     });
 
     // Gem Collection
-    gems.forEach(g =&gt; {
-        if (g.visible &amp;&amp; pos.distanceTo(g.position) &lt; 2) {
+    gems.forEach(g => {
+        if (g.visible && pos.distanceTo(g.position) < 2) {
             g.visible = false; score += 100; scoreEl.innerText = score;
         }
     });
 
     // Ramp Interaction
-    ramps.forEach(r =&gt; {
+    ramps.forEach(r => {
         const dx = Math.abs(pos.x - r.position.x);
         const dz = Math.abs(pos.z - r.position.z);
-        if (dx &lt; 2.5 &amp;&amp; dz &lt; 3 &amp;&amp; isGrounded) {
+        if (dx < 2.5 && dz < 3 && isGrounded) {
             velY = speed * 0.8 + 0.2;
             isGrounded = false;
         }
     });
 
-    if (isDead) gameoverEl.style.display = &#39;block&#39;;
+    if (isDead) gameoverEl.style.display = 'block';
 
     camera.position.lerp(new THREE.Vector3(pos.x, pos.y + 5, pos.z + 12), 0.1);
     camera.lookAt(pos.x, pos.y, pos.z - 5);
     renderer.render(scene, camera);
 }
 animate();
-    </script>
-  </body>
-</html>
+</script>
+</body>
+</html> 
