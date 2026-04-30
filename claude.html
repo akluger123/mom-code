@@ -1,751 +1,825 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Downhill Drift Dash!</title>
   <style>
-    body {
-      margin: 0;
-      overflow: hidden;
-      font-family: 'Segoe UI', sans-serif;
-      background: #000;
-    }
-
-    #ui, #menu, #shop, #leaderboard, #instructions, #gameover, #pauseMenu, #caughtMenu {
-      position: absolute;
-      color: white;
-      text-shadow: 2px 2px 4px #000;
-      user-select: none;
-    }
+    * { box-sizing: border-box; }
+    body { margin: 0; overflow: hidden; font-family: 'Segoe UI', sans-serif; background: #000; }
 
     #ui {
-      top: 16px;
-      left: 16px;
-      font-size: 24px;
-      font-weight: bold;
-      z-index: 10;
-    }
-
-    #money {
-      display: block;
-      font-size: 18px;
-      margin-top: 4px;
-    }
-
-    #instructions {
-      bottom: 16px;
-      width: 100%;
-      text-align: center;
-      font-size: 16px;
-      z-index: 10;
+      position: absolute; top: 16px; left: 16px;
+      color: white; font-size: 22px; font-weight: bold;
+      text-shadow: 2px 2px 4px #000; z-index: 10;
       pointer-events: none;
     }
+    #ui span { display: block; font-size: 16px; margin-top: 2px; }
+
+    #instructions {
+      position: absolute; bottom: 16px; width: 100%;
+      text-align: center; color: white; font-size: 15px;
+      text-shadow: 2px 2px 4px #000; z-index: 10; pointer-events: none;
+    }
+
+    .overlay {
+      display: none;
+      position: fixed; top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.65);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+    .overlay.active { display: flex; }
 
     .panel {
-      display: none;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      min-width: 360px;
-      max-width: 560px;
-      background: rgba(0,0,0,0.75);
-      border: 2px solid rgba(255,255,255,0.25);
-      border-radius: 18px;
-      padding: 24px;
-      z-index: 20;
+      background: rgba(10,10,30,0.95);
+      border: 2px solid rgba(255,255,255,0.2);
+      border-radius: 20px;
+      padding: 36px 40px;
+      color: white;
       text-align: center;
-      box-shadow: 0 0 30px rgba(0,0,0,0.4);
+      min-width: 340px;
+      max-width: 520px;
+      width: 90%;
+      box-shadow: 0 0 40px rgba(0,0,0,0.6);
     }
 
-    .panel h1, .panel h2 {
-      margin: 0 0 12px 0;
-    }
+    .panel h1 { margin: 0 0 6px; font-size: 40px; }
+    .panel h2 { margin: 0 0 10px; font-size: 30px; }
+    .panel p  { margin: 0 0 16px; opacity: 0.8; font-size: 15px; }
 
-    .btnRow {
-      display: flex;
-      gap: 10px;
-      justify-content: center;
-      flex-wrap: wrap;
-      margin-top: 14px;
+    .btn-row {
+      display: flex; flex-wrap: wrap;
+      gap: 10px; justify-content: center;
+      margin-top: 16px;
     }
 
     button {
-      cursor: pointer;
-      border: none;
-      border-radius: 12px;
-      padding: 12px 16px;
-      font-size: 16px;
-      font-weight: 700;
-      background: #ffffff;
-      color: #111;
+      cursor: pointer; border: none;
+      border-radius: 12px; padding: 12px 22px;
+      font-size: 16px; font-weight: 700;
+      background: #fff; color: #111;
+      transition: background 0.15s;
+    }
+    button:hover { background: #ddd; }
+    button:disabled { opacity: 0.45; cursor: default; }
+    button.selected { background: #00cc66; color: #fff; }
+
+    .shop-list, .board-list {
+      text-align: left; margin-top: 14px;
+      max-height: 320px; overflow-y: auto;
     }
 
-    button:hover {
-      background: #eaeaea;
-    }
-
-    .small {
-      font-size: 14px;
-      opacity: 0.9;
-      margin-top: 8px;
-    }
-
-    .list {
-      text-align: left;
-      margin-top: 14px;
-      max-height: 300px;
-      overflow-y: auto;
-      padding-right: 8px;
-    }
-
-    .carItem, .scoreItem {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 10px;
-      background: rgba(255,255,255,0.08);
-      padding: 10px;
-      border-radius: 10px;
+    .car-item, .score-item {
+      display: flex; justify-content: space-between;
+      align-items: center; gap: 12px;
+      background: rgba(255,255,255,0.07);
+      padding: 10px 14px; border-radius: 10px;
       margin-bottom: 8px;
     }
+    .car-item strong { display: block; font-size: 16px; }
+    .car-item .meta  { font-size: 13px; opacity: 0.75; margin-top: 2px; }
 
-    .carItem strong {
-      display: block;
+    .score-item { font-size: 16px; }
+    .score-item .rank { opacity: 0.6; font-size: 14px; min-width: 28px; }
+
+    #caught-msg, #gameover-msg {
+      font-size: 48px; font-weight: 900; margin-bottom: 6px;
     }
-
-    .carItem .meta {
-      font-size: 13px;
-      opacity: 0.85;
-    }
-
-    #gameover, #pauseMenu, #caughtMenu {
-      font-size: 48px;
-      font-weight: 900;
-    }
-
-    #gameover span, #pauseMenu span, #caughtMenu span {
-      display: block;
-      font-size: 18px;
-      margin-top: 10px;
-      font-weight: 600;
-    }
-
-    #menu { display: block; }
   </style>
 </head>
 <body>
-  <div id="ui">
-    Score: <span id="score">0</span>
-    <span id="money">Money: 0</span>
-    <span id="carName">Car: Starter Racer</span>
-  </div>
 
-  <div id="instructions">
-    W/S = Faster / Brake &nbsp;|&nbsp; A/D = Steer &nbsp;|&nbsp; SPACE = Jump &nbsp;|&nbsp; P = Pause &nbsp;|&nbsp; R = Restart
-  </div>
+<div id="ui">
+  Score: <span id="scoreEl">0</span>
+  <span id="moneyEl">Money: 0</span>
+  <span id="carNameEl">Car: Starter Racer</span>
+</div>
 
-  <div id="menu" class="panel">
-    <h1>Downhill Drift Dash</h1>
-    <div class="small">Choose a mode or visit the shop.</div>
-    <div class="btnRow">
-      <button id="playBtn">Play</button>
-      <button id="shopBtn">Shop</button>
-      <button id="leaderBtn">Leaderboard</button>
-      <button id="resetBtn">Reset Save</button>
-    </div>
-    <div class="small">Score is your money. Buy cars, chase records, repeat. Classic game loop wizardry.</div>
-  </div>
+<div id="instructions">
+  W/S = Faster/Brake &nbsp;|&nbsp; A/D = Steer &nbsp;|&nbsp;
+  SPACE = Jump &nbsp;|&nbsp; P = Pause &nbsp;|&nbsp; R = Restart
+</div>
 
-  <div id="shop" class="panel">
-    <h2>Shop</h2>
-    <div class="small">Buy cars with score-money. Unlocked cars can be selected anytime.</div>
-    <div class="list" id="shopList"></div>
-    <div class="btnRow">
-      <button id="backFromShop">Back</button>
+<!-- MAIN MENU -->
+<div class="overlay active" id="menuOverlay">
+  <div class="panel">
+    <h1>🏎 Drift Dash</h1>
+    <p>Race downhill, dodge barriers, collect gems.<br>Score = Money. Buy faster cars.</p>
+    <div class="btn-row">
+      <button id="btnPlay">Play</button>
+      <button id="btnShop">Shop</button>
+      <button id="btnLeader">Leaderboard</button>
+      <button id="btnReset">Reset Save</button>
     </div>
   </div>
+</div>
 
-  <div id="leaderboard" class="panel">
-    <h2>Leaderboard</h2>
-    <div class="list" id="leaderList"></div>
-    <div class="btnRow">
-      <button id="backFromLeader">Back</button>
+<!-- SHOP -->
+<div class="overlay" id="shopOverlay">
+  <div class="panel">
+    <h2>🛒 Car Shop</h2>
+    <p>Buy cars using your total money. Selected car is used next run.</p>
+    <div class="shop-list" id="shopList"></div>
+    <div class="btn-row">
+      <button id="btnShopBack">← Back</button>
     </div>
   </div>
+</div>
 
-  <div id="gameover" class="panel">CRASHED!<span>Press R to Restart</span></div>
-  <div id="pauseMenu" class="panel">PAUSED<span>Press P to Resume</span></div>
-  <div id="caughtMenu" class="panel">CAUGHT!<span>The police got you.</span></div>
+<!-- LEADERBOARD -->
+<div class="overlay" id="leaderOverlay">
+  <div class="panel">
+    <h2>🏆 Leaderboard</h2>
+    <div class="board-list" id="boardList"></div>
+    <div class="btn-row">
+      <button id="btnLeaderBack">← Back</button>
+    </div>
+  </div>
+</div>
 
-  <script type="importmap">
-  { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
-  </script>
+<!-- PAUSE -->
+<div class="overlay" id="pauseOverlay">
+  <div class="panel">
+    <h2>⏸ Paused</h2>
+    <p>Take a breath. The cops are waiting.</p>
+    <div class="btn-row">
+      <button id="btnResume">Resume (P)</button>
+      <button id="btnPauseMenu">Main Menu</button>
+    </div>
+  </div>
+</div>
 
-  <script type="module">
-    import * as THREE from 'three';
+<!-- GAME OVER / CAUGHT -->
+<div class="overlay" id="endOverlay">
+  <div class="panel">
+    <div id="endMsg">CAUGHT!</div>
+    <p id="endSub">You earned <strong id="endEarned">0</strong> money this run.</p>
+    <div class="btn-row">
+      <button id="btnRestart">Play Again (R)</button>
+      <button id="btnEndMenu">Main Menu</button>
+    </div>
+  </div>
+</div>
 
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x87ceeb);
-    scene.fog = new THREE.Fog(0x87ceeb, 60, 220);
+<script type="importmap">
+{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+</script>
 
-    const camera = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.1, 1000);
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(innerWidth, innerHeight);
-    renderer.shadowMap.enabled = true;
-    document.body.appendChild(renderer.domElement);
+<script type="module">
+import * as THREE from 'three';
 
-    const sun = new THREE.DirectionalLight(0xffffff, 1.4);
-    sun.position.set(40, 100, 60);
-    sun.castShadow = true;
-    scene.add(sun);
-    scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+/* ─────────────────────────────────────────────
+   SAVE / LEADERBOARD
+───────────────────────────────────────────── */
+const SAVE_KEY  = 'ddd_save_v2';
+const BOARD_KEY = 'ddd_board_v2';
 
-    const ROAD_LENGTH = 5000;
-    const ROAD_WIDTH = 22;
+function loadSave() {
+  try { return JSON.parse(localStorage.getItem(SAVE_KEY)) || {}; }
+  catch { return {}; }
+}
+function writeSave() {
+  localStorage.setItem(SAVE_KEY, JSON.stringify({
+    money: state.money,
+    currentSkin: state.currentSkin,
+    unlocked: [...state.unlocked]
+  }));
+}
+function loadBoard() {
+  try { return JSON.parse(localStorage.getItem(BOARD_KEY)) || []; }
+  catch { return []; }
+}
+function addToBoard(score, skin) {
+  const board = loadBoard();
+  board.push({ score, skin, date: new Date().toLocaleDateString() });
+  board.sort((a,b) => b.score - a.score);
+  localStorage.setItem(BOARD_KEY, JSON.stringify(board.slice(0, 15)));
+}
 
-    const roadCanvas = document.createElement('canvas');
-    roadCanvas.width = 256; roadCanvas.height = 1024;
-    const rc = roadCanvas.getContext('2d');
-    rc.fillStyle = '#3a3a3a'; rc.fillRect(0, 0, 256, 1024);
-    rc.strokeStyle = '#ffffff'; rc.setLineDash([80, 80]); rc.lineWidth = 6;
-    rc.beginPath(); rc.moveTo(128, 0); rc.lineTo(128, 1024); rc.stroke();
-    rc.strokeStyle = '#ffff00'; rc.setLineDash([]); rc.lineWidth = 5;
-    rc.beginPath(); rc.moveTo(8,0); rc.lineTo(8,1024); rc.stroke();
-    rc.beginPath(); rc.moveTo(248,0); rc.lineTo(248,1024); rc.stroke();
+/* ─────────────────────────────────────────────
+   CAR DEFINITIONS
+───────────────────────────────────────────── */
+const CAR_DEFS = [
+  { id: 'starter',      name: 'Starter Racer',    price: 0,    bodyColor: 0xff2020, cabinColor: 0x222244, bodyW: 1.30, bodyH: 0.45, bodyD: 2.40 },
+  { id: 'mclaren',      name: 'Orange Speedster',  price: 2500, bodyColor: 0xff6a00, cabinColor: 0x111111, bodyW: 1.35, bodyH: 0.38, bodyD: 2.55 },
+  { id: 'ferrari',      name: 'Crimson Veloce',    price: 3000, bodyColor: 0xcc0000, cabinColor: 0x330000, bodyW: 1.38, bodyH: 0.42, bodyD: 2.45 },
+  { id: 'lamborghini',  name: 'Yellow Blade',      price: 4000, bodyColor: 0xffe000, cabinColor: 0x222200, bodyW: 1.45, bodyH: 0.34, bodyD: 2.60 },
+  { id: 'porsche',      name: 'White Track GT',    price: 3500, bodyColor: 0xffffff, cabinColor: 0x334455, bodyW: 1.35, bodyH: 0.42, bodyD: 2.35 },
+  { id: 'ford_gt',      name: 'Blue GT Racer',     price: 4500, bodyColor: 0x2255ff, cabinColor: 0x001133, bodyW: 1.42, bodyH: 0.38, bodyD: 2.50 },
+];
 
-    const roadTex = new THREE.CanvasTexture(roadCanvas);
-    roadTex.wrapS = roadTex.wrapT = THREE.RepeatWrapping;
-    roadTex.repeat.set(1, ROAD_LENGTH / 20);
+/* ─────────────────────────────────────────────
+   GAME STATE
+───────────────────────────────────────────── */
+const saved = loadSave();
+const state = {
+  money:       saved.money       ?? 0,
+  currentSkin: saved.currentSkin ?? 'starter',
+  unlocked:    new Set(saved.unlocked ?? ['starter']),
+};
 
-    const road = new THREE.Mesh(
-      new THREE.PlaneGeometry(ROAD_WIDTH, ROAD_LENGTH),
-      new THREE.MeshPhongMaterial({ map: roadTex })
+/* ─────────────────────────────────────────────
+   THREE.JS SETUP
+───────────────────────────────────────────── */
+const scene    = new THREE.Scene();
+scene.background = new THREE.Color(0x87ceeb);
+scene.fog        = new THREE.Fog(0x87ceeb, 60, 220);
+
+const camera = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+document.body.appendChild(renderer.domElement);
+
+window.addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+const sun = new THREE.DirectionalLight(0xffffff, 1.4);
+sun.position.set(40, 100, 60);
+sun.castShadow = true;
+scene.add(sun);
+
+/* ─────────────────────────────────────────────
+   WORLD GEOMETRY
+───────────────────────────────────────────── */
+const ROAD_LENGTH = 5000;
+const ROAD_WIDTH  = 22;
+
+const roadCanvas = document.createElement('canvas');
+roadCanvas.width = 256; roadCanvas.height = 1024;
+const rc = roadCanvas.getContext('2d');
+rc.fillStyle = '#3a3a3a'; rc.fillRect(0, 0, 256, 1024);
+rc.strokeStyle = '#ffffff'; rc.setLineDash([80,80]); rc.lineWidth = 6;
+rc.beginPath(); rc.moveTo(128,0); rc.lineTo(128,1024); rc.stroke();
+rc.strokeStyle = '#ffff00'; rc.setLineDash([]); rc.lineWidth = 5;
+rc.beginPath(); rc.moveTo(8,0);   rc.lineTo(8,1024);   rc.stroke();
+rc.beginPath(); rc.moveTo(248,0); rc.lineTo(248,1024); rc.stroke();
+
+const roadTex = new THREE.CanvasTexture(roadCanvas);
+roadTex.wrapS = roadTex.wrapT = THREE.RepeatWrapping;
+roadTex.repeat.set(1, ROAD_LENGTH / 20);
+
+const road = new THREE.Mesh(
+  new THREE.PlaneGeometry(ROAD_WIDTH, ROAD_LENGTH),
+  new THREE.MeshPhongMaterial({ map: roadTex })
+);
+road.rotation.x = -Math.PI / 2;
+road.position.set(0, 0, -ROAD_LENGTH / 2);
+road.receiveShadow = true;
+scene.add(road);
+
+const grass = new THREE.Mesh(
+  new THREE.PlaneGeometry(600, ROAD_LENGTH),
+  new THREE.MeshPhongMaterial({ color: 0x2d8a2d })
+);
+grass.rotation.x = -Math.PI / 2;
+grass.position.set(0, -0.01, -ROAD_LENGTH / 2);
+scene.add(grass);
+
+const wallMat = new THREE.MeshPhongMaterial({ color: 0x555555 });
+[-1, 1].forEach(side => {
+  const w = new THREE.Mesh(new THREE.BoxGeometry(1, 10, ROAD_LENGTH), wallMat);
+  w.position.set(side * (ROAD_WIDTH / 2 + 0.5), 2, -ROAD_LENGTH / 2);
+  scene.add(w);
+});
+
+for (let i = 0; i < 200; i++) {
+  const z = -(Math.random() * ROAD_LENGTH);
+  const side = Math.random() > 0.5 ? 1 : -1;
+  const x = side * (20 + Math.random() * 30);
+  const trunk = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.3, 0.4, 3, 6),
+    new THREE.MeshPhongMaterial({ color: 0x5c3a1e })
+  );
+  trunk.position.set(x, 1.5, z);
+  scene.add(trunk);
+  const top = new THREE.Mesh(
+    new THREE.ConeGeometry(2.2, 4, 7),
+    new THREE.MeshPhongMaterial({ color: 0x1a6b1a })
+  );
+  top.position.set(x, 5, z);
+  scene.add(top);
+}
+
+/* ─────────────────────────────────────────────
+   CAR BUILDER
+───────────────────────────────────────────── */
+function buildCar(def) {
+  const g = new THREE.Group();
+
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(def.bodyW, def.bodyH, def.bodyD),
+    new THREE.MeshPhongMaterial({ color: def.bodyColor })
+  );
+  body.castShadow = true;
+  g.add(body);
+
+  const cabin = new THREE.Mesh(
+    new THREE.BoxGeometry(def.bodyW * 0.78, def.bodyH * 0.95, def.bodyD * 0.46),
+    new THREE.MeshPhongMaterial({ color: def.cabinColor })
+  );
+  cabin.position.set(0, def.bodyH * 0.95, -def.bodyD * 0.08);
+  g.add(cabin);
+
+  const spoiler = new THREE.Mesh(
+    new THREE.BoxGeometry(def.bodyW * 0.65, 0.07, 0.18),
+    new THREE.MeshPhongMaterial({ color: 0x111111 })
+  );
+  spoiler.position.set(0, def.bodyH * 0.9, def.bodyD * 0.44);
+  g.add(spoiler);
+
+  const wheelPositions = [
+    [ def.bodyW * 0.58, -def.bodyH * 0.4,  def.bodyD * 0.32],
+    [-def.bodyW * 0.58, -def.bodyH * 0.4,  def.bodyD * 0.32],
+    [ def.bodyW * 0.58, -def.bodyH * 0.4, -def.bodyD * 0.32],
+    [-def.bodyW * 0.58, -def.bodyH * 0.4, -def.bodyD * 0.32],
+  ];
+  wheelPositions.forEach(p => {
+    const w = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.3, 0.3, 0.28, 14),
+      new THREE.MeshPhongMaterial({ color: 0x111111 })
     );
-    road.rotation.x = -Math.PI / 2;
-    road.position.set(0, 0, -ROAD_LENGTH / 2);
-    road.receiveShadow = true;
-    scene.add(road);
+    w.rotation.z = Math.PI / 2;
+    w.position.set(...p);
+    g.add(w);
+  });
 
-    const wallGeo = new THREE.BoxGeometry(1, 10, ROAD_LENGTH);
-    const wallMat = new THREE.MeshPhongMaterial({ color: 0x555555 });
-    const leftWall = new THREE.Mesh(wallGeo, wallMat);
-    leftWall.position.set(-ROAD_WIDTH/2 - 0.5, 2, -ROAD_LENGTH/2);
-    scene.add(leftWall);
-    const rightWall = new THREE.Mesh(wallGeo, wallMat);
-    rightWall.position.set(ROAD_WIDTH/2 + 0.5, 2, -ROAD_LENGTH/2);
-    scene.add(rightWall);
+  return g;
+}
 
-    const grass = new THREE.Mesh(
-      new THREE.PlaneGeometry(600, ROAD_LENGTH),
-      new THREE.MeshPhongMaterial({ color: 0x2d8a2d })
+function buildPoliceCar() {
+  const g = new THREE.Group();
+
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(1.4, 0.48, 2.6),
+    new THREE.MeshPhongMaterial({ color: 0x111111 })
+  );
+  body.castShadow = true;
+  g.add(body);
+
+  const cabin = new THREE.Mesh(
+    new THREE.BoxGeometry(1.05, 0.42, 1.1),
+    new THREE.MeshPhongMaterial({ color: 0x1a2a6c })
+  );
+  cabin.position.set(0, 0.46, -0.1);
+  g.add(cabin);
+
+  const lightBar = new THREE.Mesh(
+    new THREE.BoxGeometry(0.72, 0.1, 0.24),
+    new THREE.MeshPhongMaterial({ color: 0xcccccc })
+  );
+  lightBar.position.set(0, 0.65, 0.05);
+  g.add(lightBar);
+
+  const redL = new THREE.Mesh(
+    new THREE.BoxGeometry(0.26, 0.09, 0.17),
+    new THREE.MeshPhongMaterial({ color: 0xff2222, emissive: 0xff0000, emissiveIntensity: 0.6 })
+  );
+  redL.position.set(-0.2, 0.71, 0.05);
+  g.add(redL);
+
+  const blueL = new THREE.Mesh(
+    new THREE.BoxGeometry(0.26, 0.09, 0.17),
+    new THREE.MeshPhongMaterial({ color: 0x2266ff, emissive: 0x0044ff, emissiveIntensity: 0.6 })
+  );
+  blueL.position.set(0.2, 0.71, 0.05);
+  g.add(blueL);
+
+  const stripeL = new THREE.Mesh(
+    new THREE.BoxGeometry(0.06, 0.5, 2.62),
+    new THREE.MeshPhongMaterial({ color: 0x2266ff })
+  );
+  stripeL.position.set(-0.71, 0, 0);
+  g.add(stripeL);
+
+  const stripeR = new THREE.Mesh(
+    new THREE.BoxGeometry(0.06, 0.5, 2.62),
+    new THREE.MeshPhongMaterial({ color: 0xff2222 })
+  );
+  stripeR.position.set(0.71, 0, 0);
+  g.add(stripeR);
+
+  const wheelPositions = [
+    [ 0.72, -0.19,  0.82], [-0.72, -0.19,  0.82],
+    [ 0.72, -0.19, -0.82], [-0.72, -0.19, -0.82],
+  ];
+  wheelPositions.forEach(p => {
+    const w = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.3, 0.3, 0.28, 14),
+      new THREE.MeshPhongMaterial({ color: 0x111111 })
     );
-    grass.rotation.x = -Math.PI / 2;
-    grass.position.set(0, -0.01, -ROAD_LENGTH / 2);
-    scene.add(grass);
+    w.rotation.z = Math.PI / 2;
+    w.position.set(...p);
+    g.add(w);
+  });
 
-    for (let i = 0; i < 200; i++) {
-      const z = -(Math.random() * ROAD_LENGTH);
-      const side = Math.random() > 0.5 ? 1 : -1;
-      const x = side * (20 + Math.random() * 30);
-      const trunk = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.3, 0.4, 3, 6),
-        new THREE.MeshPhongMaterial({ color: 0x5c3a1e })
+  return g;
+}
+
+/* ─────────────────────────────────────────────
+   SCENE OBJECTS
+───────────────────────────────────────────── */
+let playerCarGroup = buildCar(CAR_DEFS[0]);
+scene.add(playerCarGroup);
+
+const policeCarGroup = buildPoliceCar();
+scene.add(policeCarGroup);
+
+const hazards = [], gems = [], ramps = [];
+
+function clearWorld() {
+  [...hazards, ...gems, ...ramps].forEach(o => scene.remove(o));
+  hazards.length = gems.length = ramps.length = 0;
+}
+
+function createWorld() {
+  clearWorld();
+  for (let i = 0; i < 110; i++) {
+    const z = -60 - i * 42;
+
+    if (Math.random() > 0.3) {
+      const gapX = (Math.random() - 0.5) * 10;
+      const geo  = new THREE.BoxGeometry(8, 1.4, 0.8);
+      const mat  = new THREE.MeshPhongMaterial({ color: 0xff3300 });
+      const h1   = new THREE.Mesh(geo, mat);
+      const h2   = new THREE.Mesh(geo, mat);
+      h1.position.set(gapX - 7.5, 0.7, z);
+      h2.position.set(gapX + 7.5, 0.7, z);
+      scene.add(h1, h2);
+      hazards.push(h1, h2);
+    }
+
+    if (Math.random() > 0.6) {
+      const r = new THREE.Mesh(
+        new THREE.BoxGeometry(4.5, 0.5, 6),
+        new THREE.MeshPhongMaterial({ color: 0xffcc00 })
       );
-      trunk.position.set(x, 1.5, z);
-      scene.add(trunk);
-      const top = new THREE.Mesh(
-        new THREE.ConeGeometry(2.2, 4, 7),
-        new THREE.MeshPhongMaterial({ color: 0x1a6b1a })
-      );
-      top.position.set(x, 5, z);
-      scene.add(top);
+      r.position.set((Math.random() - 0.5) * 13, 0.2, z - 4);
+      r.rotation.x = -0.32;
+      scene.add(r);
+      ramps.push(r);
     }
 
-    function makeCarSkin(kind) {
-      const g = new THREE.Group();
-      let baseColor = 0xff2020;
-      let accent = 0x222244;
-      let bodyGeo = new THREE.BoxGeometry(1.3, 0.45, 2.4);
-      let cabinGeo = new THREE.BoxGeometry(1.0, 0.42, 1.15);
+    const g = new THREE.Mesh(
+      new THREE.OctahedronGeometry(0.6),
+      new THREE.MeshPhongMaterial({ color: 0x00eeff })
+    );
+    g.position.set((Math.random() - 0.5) * 15, 1.2, z - 20);
+    scene.add(g);
+    gems.push(g);
+  }
+}
 
-      if (kind === 'starter') {
-        baseColor = 0xff2020;
-      } else if (kind === 'mclaren_style') {
-        baseColor = 0xff6a00;
-        bodyGeo = new THREE.BoxGeometry(1.35, 0.38, 2.55);
-        cabinGeo = new THREE.BoxGeometry(0.95, 0.35, 1.1);
-      } else if (kind === 'ferrari_style') {
-        baseColor = 0xcc0000;
-        bodyGeo = new THREE.BoxGeometry(1.38, 0.42, 2.45);
-      } else if (kind === 'lambo_style') {
-        baseColor = 0xffe000;
-        bodyGeo = new THREE.BoxGeometry(1.45, 0.34, 2.6);
-        cabinGeo = new THREE.BoxGeometry(0.9, 0.34, 1.0);
-      } else if (kind === 'porsche_style') {
-        baseColor = 0xffffff;
-        bodyGeo = new THREE.BoxGeometry(1.35, 0.42, 2.35);
-        cabinGeo = new THREE.BoxGeometry(1.02, 0.38, 1.1);
-      } else if (kind === 'ford_gt_style') {
-        baseColor = 0x2b5cff;
-        bodyGeo = new THREE.BoxGeometry(1.42, 0.38, 2.5);
-        cabinGeo = new THREE.BoxGeometry(0.92, 0.35, 1.0);
-      }
+/* ─────────────────────────────────────────────
+   RUN STATE
+───────────────────────────────────────────── */
+let pos        = new THREE.Vector3(0, 0.3, 0);
+let speed      = 0, velX = 0, velY = 0;
+let heading    = 0;
+let isGrounded = true;
+let airYaw     = 0, airYawVel = 0, airPitch = 0;
+let score      = 0;
+let gameRunning = false;
+let isPaused    = false;
+let isCrashed   = false;
 
-      const body = new THREE.Mesh(bodyGeo, new THREE.MeshPhongMaterial({ color: baseColor }));
-      body.castShadow = true;
-      g.add(body);
+let policeZ       = 9;
+let catchProgress = 0;
+let sirenFlip     = 0;
 
-      const cabin = new THREE.Mesh(cabinGeo, new THREE.MeshPhongMaterial({ color: accent }));
-      cabin.position.set(0, 0.43, -0.2);
-      g.add(cabin);
+const keys = {};
+window.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (!gameRunning || isPaused) return;
 
-      const spoiler = new THREE.Mesh(
-        new THREE.BoxGeometry(0.8, 0.08, 0.18),
-        new THREE.MeshPhongMaterial({ color: 0x111111 })
-      );
-      spoiler.position.set(0, 0.55, 1.05);
-      g.add(spoiler);
+  if (e.code === 'Space' && isGrounded && !isCrashed) {
+    velY = 0.45;
+    isGrounded = false;
+    airYaw = airPitch = airYawVel = 0;
+  }
+  if (e.code === 'KeyP') togglePause();
+  if (e.code === 'KeyR') beginRun();
+});
+window.addEventListener('keyup', e => { keys[e.code] = false; });
 
-      const wheels = [];
-      [[ 0.72, -0.18,  0.78], [-0.72, -0.18,  0.78], [ 0.72, -0.18, -0.78], [-0.72, -0.18, -0.78]].forEach(p => {
-        const w = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.3, 0.3, 0.3, 14),
-          new THREE.MeshPhongMaterial({ color: 0x111111 })
-        );
-        w.rotation.z = Math.PI / 2;
-        w.position.set(...p);
-        g.add(w);
-        wheels.push(w);
-      });
+/* ─────────────────────────────────────────────
+   UI HELPERS
+───────────────────────────────────────────── */
+const scoreEl   = document.getElementById('scoreEl');
+const moneyEl   = document.getElementById('moneyEl');
+const carNameEl = document.getElementById('carNameEl');
 
-      return g;
+const overlays = {
+  menu:   document.getElementById('menuOverlay'),
+  shop:   document.getElementById('shopOverlay'),
+  leader: document.getElementById('leaderOverlay'),
+  pause:  document.getElementById('pauseOverlay'),
+  end:    document.getElementById('endOverlay'),
+};
+
+function showOverlay(name) {
+  Object.values(overlays).forEach(o => o.classList.remove('active'));
+  if (name) overlays[name].classList.add('active');
+}
+
+function refreshHUD() {
+  scoreEl.innerText   = score;
+  moneyEl.innerText   = `Money: \${state.money}`;
+  carNameEl.innerText = `Car: \${CAR_DEFS.find(c => c.id === state.currentSkin)?.name ?? '?'}`;
+}
+
+/* ─────────────────────────────────────────────
+   SHOP UI
+───────────────────────────────────────────── */
+function renderShop() {
+  const list = document.getElementById('shopList');
+  list.innerHTML = '';
+  CAR_DEFS.forEach(def => {
+    const owned    = state.unlocked.has(def.id);
+    const selected = state.currentSkin === def.id;
+    const item     = document.createElement('div');
+    item.className = 'car-item';
+
+    const info = document.createElement('div');
+    info.innerHTML = `<strong>\${def.name}</strong>
+      <div class="meta">\${owned ? (selected ? '✅ Selected' : 'Owned') : `💰 \${def.price}`}</div>`;
+
+    const btn = document.createElement('button');
+    if (selected) {
+      btn.textContent = 'Selected';
+      btn.className   = 'selected';
+      btn.disabled    = true;
+    } else if (owned) {
+      btn.textContent = 'Select';
+      btn.onclick = () => {
+        state.currentSkin = def.id;
+        writeSave();
+        refreshHUD();
+        renderShop();
+      };
+    } else {
+      btn.textContent = `Buy (\${def.price})`;
+      btn.disabled    = state.money < def.price;
+      btn.onclick = () => {
+        if (state.money < def.price) return;
+        state.money -= def.price;
+        state.unlocked.add(def.id);
+        state.currentSkin = def.id;
+        writeSave();
+        refreshHUD();
+        renderShop();
+      };
     }
 
-    function makePoliceCar() {
-      const g = new THREE.Group();
-      const body = new THREE.Mesh(
-        new THREE.BoxGeometry(1.4, 0.48, 2.55),
-        new THREE.MeshPhongMaterial({ color: 0x111111 })
-      );
-      body.castShadow = true;
-      g.add(body);
+    item.appendChild(info);
+    item.appendChild(btn);
+    list.appendChild(item);
+  });
+}
 
-      const cabin = new THREE.Mesh(
-        new THREE.BoxGeometry(1.0, 0.4, 1.1),
-        new THREE.MeshPhongMaterial({ color: 0x2244aa })
-      );
-      cabin.position.set(0, 0.45, -0.1);
-      g.add(cabin);
+/* ─────────────────────────────────────────────
+   LEADERBOARD UI
+───────────────────────────────────────────── */
+function renderLeaderboard() {
+  const list  = document.getElementById('boardList');
+  const board = loadBoard();
+  list.innerHTML = '';
+  if (!board.length) {
+    list.innerHTML = '<p style="text-align:center;opacity:0.6">No runs yet. Hit the road!</p>';
+    return;
+  }
+  board.forEach((row, i) => {
+    const div = document.createElement('div');
+    div.className = 'score-item';
+    const carName = CAR_DEFS.find(c => c.id === row.skin)?.name ?? row.skin;
+    div.innerHTML = `<span class="rank">#\${i+1}</span>
+      <span style="flex:1">\${carName}</span>
+      <strong>\${row.score.toLocaleString()}</strong>
+      <span style="opacity:0.5;font-size:13px">\${row.date ?? ''}</span>`;
+    list.appendChild(div);
+  });
+}
 
-      const lightBar = new THREE.Mesh(
-        new THREE.BoxGeometry(0.7, 0.12, 0.25),
-        new THREE.MeshPhongMaterial({ color: 0xdddddd })
-      );
-      lightBar.position.set(0, 0.62, 0.05);
-      g.add(lightBar);
+/* ─────────────────────────────────────────────
+   GAME FLOW
+───────────────────────────────────────────── */
+function beginRun() {
+  const def = CAR_DEFS.find(c => c.id === state.currentSkin) ?? CAR_DEFS[0];
+  scene.remove(playerCarGroup);
+  playerCarGroup = buildCar(def);
+  scene.add(playerCarGroup);
 
-      const redLight = new THREE.Mesh(
-        new THREE.BoxGeometry(0.25, 0.08, 0.18),
-        new THREE.MeshPhongMaterial({ color: 0xff2222 })
-      );
-      redLight.position.set(-0.18, 0.68, 0.05);
-      g.add(redLight);
+  pos.set(0, 0.3, 0);
+  speed = velX = velY = heading = airYaw = airPitch = airYawVel = 0;
+  isGrounded    = true;
+  isCrashed     = false;
+  isPaused      = false;
+  score         = 0;
+  policeZ       = 9;
+  catchProgress = 0;
+  gameRunning   = true;
 
-      const blueLight = new THREE.Mesh(
-        new THREE.BoxGeometry(0.25, 0.08, 0.18),
-        new THREE.MeshPhongMaterial({ color: 0x2266ff })
-      );
-      blueLight.position.set(0.18, 0.68, 0.05);
-      g.add(blueLight);
+  createWorld();
+  refreshHUD();
+  showOverlay(null);
+}
 
-      [[ 0.72, -0.18,  0.78], [-0.72, -0.18,  0.78], [ 0.72, -0.18, -0.78], [-0.72, -0.18, -0.78]].forEach(p => {
-        const w = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.3, 0.3, 0.3, 14),
-          new THREE.MeshPhongMaterial({ color: 0x111111 })
-        );
-        w.rotation.z = Math.PI / 2;
-        w.position.set(...p);
-        g.add(w);
-      });
+function triggerCrash() {
+  if (isCrashed) return;
+  isCrashed = true;
+}
 
-      return g;
-    }
+function finishCaught() {
+  gameRunning = false;
+  const earned = Math.floor(score * 0.3);
+  state.money += earned;
+  addToBoard(score, state.currentSkin);
+  writeSave();
+  refreshHUD();
 
-    const carGroup = makeCarSkin('starter');
-    scene.add(carGroup);
+  document.getElementById('endMsg').textContent   = '🚔 CAUGHT!';
+  document.getElementById('endEarned').textContent = earned.toLocaleString();
+  showOverlay('end');
+}
 
-    const policeCar = makePoliceCar();
-    scene.add(policeCar);
+function togglePause() {
+  if (!gameRunning || isCrashed) return;
+  isPaused = !isPaused;
+  showOverlay(isPaused ? 'pause' : null);
+}
 
-    let currentSkin = 'starter';
-    let pos = new THREE.Vector3(0, 0.3, 0);
-    let speed = 0, velX = 0, velY = 0, heading = 0, isGrounded = true;
-    let airYawVel = 0, airPitchVel = 0, airYaw = 0, airPitch = 0;
-    let score = 0, money = 0, isDead = false, isPaused = false, isCaught = false;
-    let policeOffset = 9;
-    let policeCatchTimer = 0;
+/* ─────────────────────────────────────────────
+   BUTTON WIRING  (all in one place, no races)
+───────────────────────────────────────────── */
+document.getElementById('btnPlay').addEventListener('click', beginRun);
 
-    const hazards = [], gems = [], ramps = [];
-    const scoreEl = document.getElementById('score');
-    const moneyEl = document.getElementById('money');
-    const carNameEl = document.getElementById('carName');
+document.getElementById('btnShop').addEventListener('click', () => {
+  renderShop();
+  showOverlay('shop');
+});
 
-    const menuEl = document.getElementById('menu');
-    const shopEl = document.getElementById('shop');
-    const leaderboardEl = document.getElementById('leaderboard');
-    const gameoverEl = document.getElementById('gameover');
-    const pauseEl = document.getElementById('pauseMenu');
-    const caughtEl = document.getElementById('caughtMenu');
+document.getElementById('btnLeader').addEventListener('click', () => {
+  renderLeaderboard();
+  showOverlay('leader');
+});
 
-    const SAVE_KEY = 'ddd_save_v1';
-    const BOARD_KEY = 'ddd_board_v1';
+document.getElementById('btnReset').addEventListener('click', () => {
+  localStorage.removeItem(SAVE_KEY);
+  localStorage.removeItem(BOARD_KEY);
+  state.money       = 0;
+  state.currentSkin = 'starter';
+  state.unlocked    = new Set(['starter']);
+  writeSave();
+  refreshHUD();
+  renderShop();
+});
 
-    const carDefs = [
-      { id: 'starter', name: 'Starter Racer', price: 0 },
-      { id: 'mclaren_style', name: 'Orange Speedster', price: 2500 },
-      { id: 'ferrari_style', name: 'Crimson Veloce', price: 3000 },
-      { id: 'lambo_style', name: 'Yellow Blade', price: 4000 },
-      { id: 'porsche_style', name: 'White Track GT', price: 3500 },
-      { id: 'ford_gt_style', name: 'Blue GT Racer', price: 4500 }
-    ];
+document.getElementById('btnShopBack').addEventListener('click',   () => showOverlay('menu'));
+document.getElementById('btnLeaderBack').addEventListener('click',  () => showOverlay('menu'));
+document.getElementById('btnResume').addEventListener('click',      togglePause);
+document.getElementById('btnPauseMenu').addEventListener('click',   () => { isPaused = false; gameRunning = false; showOverlay('menu'); });
+document.getElementById('btnRestart').addEventListener('click',     beginRun);
+document.getElementById('btnEndMenu').addEventListener('click',     () => showOverlay('menu'));
 
-    let save = loadSave();
-    money = save.money || 0;
-    currentSkin = save.currentSkin || 'starter';
-    unlocked = new Set(save.unlocked || ['starter']);
-    scoreEl.innerText = score;
-    moneyEl.innerText = `Money: \${money}`;
-    applySkin(currentSkin);
+/* ─────────────────────────────────────────────
+   ANIMATION LOOP
+───────────────────────────────────────────── */
+function animate() {
+  requestAnimationFrame(animate);
 
-    function loadSave() {
-      try { return JSON.parse(localStorage.getItem(SAVE_KEY)) || {}; }
-      catch { return {}; }
-    }
-    function writeSave() {
-      localStorage.setItem(SAVE_KEY, JSON.stringify({
-        money, currentSkin, unlocked: [...unlocked]
-      }));
-    }
-    function loadBoard() {
-      try { return JSON.parse(localStorage.getItem(BOARD_KEY)) || []; }
-      catch { return []; }
-    }
-    function writeBoard(board) {
-      localStorage.setItem(BOARD_KEY, JSON.stringify(board));
-    }
+  if (!gameRunning || isPaused) {
+    renderer.render(scene, camera);
+    return;
+  }
 
-    let unlocked = new Set(['starter']);
+  sirenFlip += 0.08;
 
-    function applySkin(id) {
-      currentSkin = id;
-      scene.remove(carGroup);
-      const newCar = makeCarSkin(id);
-      carGroup.children.length = 0;
-      while (newCar.children.length) carGroup.add(newCar.children[0]);
-      scene.add(carGroup);
+  const GRAVITY   = 0.02;
+  const TURN      = 0.05;
+  const MAX_SPEED = 1.0;
 
-      const def = carDefs.find(c => c.id === id);
-      carNameEl.innerText = `Car: \${def ? def.name : 'Unknown'}`;
-      writeSave();
-    }
-
-    function createWorld() {
-      [...hazards, ...gems, ...ramps].forEach(o => scene.remove(o));
-      hazards.length = gems.length = ramps.length = 0;
-
-      for (let i = 0; i < 110; i++) {
-        const z = -60 - i * 42;
-
-        if (Math.random() > 0.3) {
-          const gapX = (Math.random() - 0.5) * 10;
-          const geo = new THREE.BoxGeometry(8, 1.4, 0.8);
-          const mat = new THREE.MeshPhongMaterial({ color: 0xff3300 });
-          const h1 = new THREE.Mesh(geo, mat); h1.position.set(gapX - 7.5, 0.7, z);
-          const h2 = new THREE.Mesh(geo, mat); h2.position.set(gapX + 7.5, 0.7, z);
-          scene.add(h1, h2); hazards.push(h1, h2);
-        }
-
-        if (Math.random() > 0.6) {
-          const r = new THREE.Mesh(
-            new THREE.BoxGeometry(4.5, 0.5, 6),
-            new THREE.MeshPhongMaterial({ color: 0xffcc00 })
-          );
-          r.position.set((Math.random() - 0.5) * 13, 0.2, z - 4);
-          r.rotation.x = -0.32;
-          scene.add(r);
-          ramps.push(r);
-        }
-
-        const g = new THREE.Mesh(
-          new THREE.OctahedronGeometry(0.6),
-          new THREE.MeshPhongMaterial({ color: 0x00eeff })
-        );
-        g.position.set((Math.random() - 0.5) * 15, 1.2, z - 20);
-        scene.add(g);
-        gems.push(g);
-      }
-    }
-
-    createWorld();
-
-    function updateShopUI() {
-      const list = document.getElementById('shopList');
-      list.innerHTML = '';
-      carDefs.forEach(def => {
-        const owned = unlocked.has(def.id);
-        const item = document.createElement('div');
-        item.className = 'carItem';
-        item.innerHTML = `
-          <div>
-            <strong>\${def.name}</strong>
-            <div class="meta">\${owned ? 'Owned' : `Price: \${def.price}`}</div>
-          </div>
-          <div></div>
-        `;
-        const btn = document.createElement('button');
-        btn.textContent = owned ? (currentSkin === def.id ? 'Selected' : 'Select') : 'Buy';
-        btn.disabled = currentSkin === def.id && owned;
-        btn.onclick = () => {
-          if (owned) {
-            applySkin(def.id);
-          } else if (money >= def.price) {
-            money -= def.price;
-            unlocked.add(def.id);
-            applySkin(def.id);
-            writeSave();
-            updateShopUI();
-            moneyEl.innerText = `Money: \${money}`;
-          }
-        };
-        item.children[1].appendChild(btn);
-        list.appendChild(item);
-      });
-    }
-
-    function updateLeaderboard() {
-      const list = document.getElementById('leaderList');
-      const board = loadBoard().sort((a,b) => b.score - a.score).slice(0, 10);
-      list.innerHTML = '';
-      if (!board.length) {
-        list.innerHTML = '<div class="small">No runs yet. Go make the leaderboard sweat.</div>';
-        return;
-      }
-      board.forEach((row, idx) => {
-        const div = document.createElement('div');
-        div.className = 'scoreItem';
-        div.innerHTML = `<div>#\${idx + 1} \${row.name}</div><div>\${row.score}</div>`;
-        list.appendChild(div);
-      });
-    }
-
-    function showPanel(el) {
-      [menuEl, shopEl, leaderboardEl, gameoverEl, pauseEl, caughtEl].forEach(p => p.style.display = 'none');
-      if (el) el.style.display = 'block';
-    }
-
-    function saveScoreToBoard(finalScore) {
-      const board = loadBoard();
-      board.push({ name: currentSkin, score: finalScore });
-      board.sort((a,b) => b.score - a.score);
-      writeBoard(board.slice(0, 20));
-    }
-
-    window.addEventListener('keydown', e => {
-      keys[e.code] = true;
-
-      if (e.code === 'Space' && isGrounded && !isDead && !isPaused && !menuOpen()) {
-        velY = 0.45;
-        isGrounded = false;
-        airYaw = airPitch = airYawVel = airPitchVel = 0;
-      }
-      if (e.code === 'KeyR') restart(true);
-      if (e.code === 'KeyP' && !isDead && !menuOpen()) {
-        isPaused = !isPaused;
-        showPanel(isPaused ? pauseEl : null);
-      }
-    });
-    window.addEventListener('keyup', e => { keys[e.code] = false; });
-
-    function menuOpen() {
-      return menuEl.style.display === 'block' || shopEl.style.display === 'block' || leaderboardEl.style.display === 'block';
-    }
-
-    function restart(fromCrash = false) {
-      if (fromCrash) {
-        money += Math.floor(score * 0.3);
-      }
-      pos.set(0, 0.3, 0);
-      speed = velX = velY = heading = airYaw = airPitch = airYawVel = airPitchVel = 0;
-      isGrounded = true;
-      isDead = false;
-      isPaused = false;
-      isCaught = false;
-      policeCatchTimer = 0;
-      score = 0;
-      scoreEl.innerText = score;
-      moneyEl.innerText = `Money: \${money}`;
-      gameoverEl.style.display = 'none';
-      caughtEl.style.display = 'none';
-      pauseEl.style.display = 'none';
-      createWorld();
-      applySkin(currentSkin);
-      writeSave();
-      showPanel(null);
-    }
-
-    function endRunCaught() {
-      isCaught = true;
-      showPanel(caughtEl);
-      saveScoreToBoard(score);
-      money += Math.floor(score * 0.3);
-      moneyEl.innerText = `Money: \${money}`;
-      writeSave();
-    }
-
-    const keys = {};
-
-    document.getElementById('playBtn').onclick = () => {
-      restart(false);
-      showPanel(null);
-    };
-    document.getElementById('shopBtn').onclick = () => {
-      updateShopUI();
-      showPanel(shopEl);
-    };
-    document.getElementById('leaderBtn').onclick = () => {
-      updateLeaderboard();
-      showPanel(leaderboardEl);
-    };
-    document.getElementById('backFromShop').onclick = () => showPanel(menuEl);
-    document.getElementById('backFromLeader').onclick = () => showPanel(menuEl);
-    document.getElementById('resetBtn').onclick = () => {
-      localStorage.removeItem(SAVE_KEY);
-      localStorage.removeItem(BOARD_KEY);
-      money = 0;
-      unlocked = new Set(['starter']);
-      applySkin('starter');
-      moneyEl.innerText = `Money: \${money}`;
-      updateShopUI();
-      updateLeaderboard();
-    };
-
-    function animate() {
-      requestAnimationFrame(animate);
-
-      if (menuOpen() || isDead || isPaused || isCaught) {
-        renderer.render(scene, camera);
-        return;
-      }
-
-      const GRAVITY = 0.02, TURN_SPEED = 0.05, MAX_SPEED = 1.0;
-
-      if (isGrounded) {
-        speed = Math.min(speed + 0.01, MAX_SPEED);
-        if (keys['KeyW']) speed += 0.01;
-        if (keys['KeyS']) speed -= 0.02;
-        if (keys['KeyA']) heading += TURN_SPEED;
-        if (keys['KeyD']) heading -= TURN_SPEED;
-
-        heading *= 0.92;
-        velX = THREE.MathUtils.lerp(velX, -heading * speed * 2.5, 0.15);
-        speed *= 0.99;
-      } else {
-        velY -= GRAVITY;
-        pos.y += velY;
-        if (keys['KeyA']) airYawVel += 0.01;
-        if (keys['KeyD']) airYawVel -= 0.01;
-        airYaw += airYawVel;
-        if (pos.y <= 0.3) {
-          pos.y = 0.3;
-          velY = 0;
-          isGrounded = true;
-          const landingFlips = Math.round(Math.abs(airYaw) / (Math.PI * 2));
-          if (landingFlips > 0) {
-            score += landingFlips * 500;
-            money += landingFlips * 500;
-            scoreEl.innerText = score;
-            moneyEl.innerText = `Money: \${money}`;
-            writeSave();
-          }
-        }
-      }
-
-      pos.z -= speed;
-      pos.x += velX;
-
-      const limit = ROAD_WIDTH / 2 - 0.8;
-      if (pos.x > limit) { pos.x = limit; velX *= -0.5; }
-      if (pos.x < -limit) { pos.x = -limit; velX *= -0.5; }
-
-      carGroup.position.copy(pos);
-      carGroup.rotation.set(isGrounded ? 0 : airPitch, heading, isGrounded ? (velX * -0.2) : airYaw);
-
-      // Police chase - stays behind you like Subway Surfers
-      const targetPolicePos = new THREE.Vector3(pos.x, 0.3, pos.z + policeOffset);
-      policeCar.position.lerp(targetPolicePos, 0.08);
-      policeCar.rotation.y = 0;
-      policeCar.rotation.z = 0;
-
-      // Collisions with barriers
-      for (const h of hazards) {
-        const dx = Math.abs(pos.x - h.position.x);
-        const dz = Math.abs(pos.z - h.position.z);
-        if (dx < 4.5 && dz < 1.0 && pos.y < 1.8) {
-          isDead = true;
-          policeCatchTimer = 0;
-          break;
-        }
-      }
-
-      // Gems
-      for (const g of gems) {
-        if (g.visible && pos.distanceTo(g.position) < 2) {
-          g.visible = false;
-          score += 100;
-          money += 100;
-          scoreEl.innerText = score;
-          moneyEl.innerText = `Money: \${money}`;
+  if (!isCrashed) {
+    if (isGrounded) {
+      speed = Math.min(speed + 0.01, MAX_SPEED);
+      if (keys['KeyW']) speed = Math.min(speed + 0.01, MAX_SPEED);
+      if (keys['KeyS']) speed -= 0.02;
+      if (keys['KeyA']) heading += TURN;
+      if (keys['KeyD']) heading -= TURN;
+      heading *= 0.92;
+      velX = THREE.MathUtils.lerp(velX, -heading * speed * 2.5, 0.15);
+      speed *= 0.99;
+    } else {
+      velY -= GRAVITY;
+      pos.y += velY;
+      if (keys['KeyA']) airYawVel += 0.01;
+      if (keys['KeyD']) airYawVel -= 0.01;
+      airYaw += airYawVel;
+      if (pos.y <= 0.3) {
+        pos.y = 0.3; velY = 0; isGrounded = true;
+        const flips = Math.round(Math.abs(airYaw) / (Math.PI * 2));
+        if (flips > 0) {
+          const bonus = flips * 500;
+          score         += bonus;
+          state.money   += bonus;
+          refreshHUD();
           writeSave();
         }
       }
-
-      // Ramps
-      for (const r of ramps) {
-        const dx = Math.abs(pos.x - r.position.x);
-        const dz = Math.abs(pos.z - r.position.z);
-        if (dx < 2.5 && dz < 3 && isGrounded) {
-          velY = speed * 0.8 + 0.2;
-          isGrounded = false;
-        }
-      }
-
-      if (isDead) {
-        policeCatchTimer += 0.02;
-        policeOffset = Math.max(1.2, 9 - policeCatchTimer * 5);
-        if (policeOffset <= 1.35) {
-          endRunCaught();
-        } else {
-          gameoverEl.style.display = 'block';
-        }
-      }
-
-      camera.position.lerp(new THREE.Vector3(pos.x, pos.y + 5, pos.z + 12), 0.1);
-      camera.lookAt(pos.x, pos.y, pos.z - 5);
-      renderer.render(scene, camera);
     }
 
-    // Main menu opens first
-    showPanel(menuEl);
-    updateShopUI();
-    updateLeaderboard();
-    animate();
+    pos.z -= speed;
+    pos.x += velX;
 
-    window.addEventListener('resize', () => {
-      camera.aspect = innerWidth / innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(innerWidth, innerHeight);
-    });
-  </script>
+    const limit = ROAD_WIDTH / 2 - 0.8;
+    if (pos.x >  limit) { pos.x =  limit; velX *= -0.5; }
+    if (pos.x < -limit) { pos.x = -limit; velX *= -0.5; }
+
+    playerCarGroup.position.copy(pos);
+    playerCarGroup.rotation.set(
+      isGrounded ? 0 : airPitch,
+      heading,
+      isGrounded ? velX * -0.2 : airYaw
+    );
+
+    // Score ticks up while alive
+    score += Math.ceil(speed * 2);
+    state.money += Math.ceil(speed * 0.5);
+    scoreEl.innerText = score;
+    moneyEl.innerText = `Money: \${state.money}`;
+
+    // Barrier collision
+    for (const h of hazards) {
+      const dx = Math.abs(pos.x - h.position.x);
+      const dz = Math.abs(pos.z - h.position.z);
+      if (dx < 4.5 && dz < 1.0 && pos.y < 1.8) { triggerCrash(); break; }
+    }
+
+    // Gem pickup
+    for (const g of gems) {
+      if (g.visible && pos.distanceTo(g.position) < 2) {
+        g.visible = false;
+        score       += 100;
+        state.money += 100;
+        refreshHUD();
+      }
+    }
+
+    // Ramp launch
+    for (const r of ramps) {
+      const dx = Math.abs(pos.x - r.position.x);
+      const dz = Math.abs(pos.z - r.position.z);
+      if (dx < 2.5 && dz < 3 && isGrounded) {
+        velY = speed * 0.8 + 0.2;
+        isGrounded = false;
+      }
+    }
+  }
+
+  // Police car chase
+  if (!isCrashed) {
+    // Normal chase — stays behind
+    const targetZ = pos.z + policeZ;
+    policeCarGroup.position.x = THREE.MathUtils.lerp(policeCarGroup.position.x, pos.x, 0.06);
+    policeCarGroup.position.y = 0.3;
+    policeCarGroup.position.z = THREE.MathUtils.lerp(policeCarGroup.position.z, targetZ, 0.06);
+  } else {
+    // Crashed — police closes in fast
+    catchProgress += 0.025;
+    const closeZ = pos.z + Math.max(1.4, policeZ * (1 - catchProgress));
+    policeCarGroup.position.x = THREE.MathUtils.lerp(policeCarGroup.position.x, pos.x, 0.15);
+    policeCarGroup.position.y = 0.3;
+    policeCarGroup.position.z = THREE.MathUtils.lerp(policeCarGroup.position.z, closeZ, 0.15);
+
+    if (catchProgress >= 1.0) {
+      finishCaught();
+      return;
+    }
+  }
+
+  // Siren flash
+  const redMesh  = policeCarGroup.children[3];
+  const blueMesh = policeCarGroup.children[4];
+  if (redMesh && blueMesh) {
+    const t = Math.sin(sirenFlip * 6) > 0;
+    redMesh.material.emissiveIntensity  = t ? 1.2 : 0.1;
+    blueMesh.material.emissiveIntensity = t ? 0.1 : 1.2;
+  }
+
+  camera.position.lerp(new THREE.Vector3(pos.x, pos.y + 5, pos.z + 12), 0.1);
+  camera.lookAt(pos.x, pos.y, pos.z - 5);
+  renderer.render(scene, camera);
+}
+
+refreshHUD();
+showOverlay('menu');
+animate();
+</script>
 </body>
 </html>
