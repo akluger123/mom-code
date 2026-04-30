@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Downhill Car Dash!</title>
+    <title>Downhill Drift Dash!</title>
     <style>
-        body { margin: 0; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #000; }
+        body { margin: 0; overflow: hidden; font-family: 'Segoe UI', sans-serif; background: #000; }
         #ui {
             position: absolute;
             top: 20px;
@@ -29,7 +29,7 @@
 </head>
 <body>
     <div id="ui">Score: <span id="score">0</span></div>
-    <div id="instructions">WASD/Arrows to Steer | SPACE to Jump | Avoid the Hazard Blocks!</div>
+    <div id="instructions">WASD/Arrows to Drift | SPACE to Jump | Avoid the Barriers!</div>
 
     <script type="importmap">
         {
@@ -45,7 +45,7 @@
         // --- SETUP ---
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x87ceeb);
-        scene.fog = new THREE.Fog(0x87ceeb, 20, 150);
+        scene.fog = new THREE.Fog(0x87ceeb, 20, 160);
 
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -53,110 +53,122 @@
         renderer.shadowMap.enabled = true;
         document.body.appendChild(renderer.domElement);
 
+        // --- ROAD TEXTURE (Canvas generated) ---
+        const roadCanvas = document.createElement('canvas');
+        roadCanvas.width = 128;
+        roadCanvas.height = 512;
+        const ctx = roadCanvas.getContext('2d');
+        ctx.fillStyle = '#333'; // Asphalt
+        ctx.fillRect(0, 0, 128, 512);
+        ctx.strokeStyle = '#fff';
+        ctx.setLineDash([40, 40]);
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(64, 0); ctx.lineTo(64, 512); // Center line
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.strokeStyle = '#ffcc00';
+        ctx.strokeRect(5, 0, 0, 512); // Side lines
+        ctx.strokeRect(123, 0, 0, 512);
+        
+        const roadTexture = new THREE.CanvasTexture(roadCanvas);
+        roadTexture.wrapS = THREE.RepeatWrapping;
+        roadTexture.wrapT = THREE.RepeatWrapping;
+        roadTexture.repeat.set(1, 100);
+
         // --- LIGHTING ---
         const sun = new THREE.DirectionalLight(0xffffff, 1.2);
-        sun.position.set(10, 50, 10);
+        sun.position.set(10, 50, 20);
         sun.castShadow = true;
         scene.add(sun);
-        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+        scene.add(new THREE.AmbientLight(0xffffff, 0.7));
 
-        // --- PLAYER (CAR MODEL) ---
+        // --- PLAYER (CAR) ---
         const playerGroup = new THREE.Group();
-        
-        // Car Body
-        const bodyGeo = new THREE.BoxGeometry(1, 0.5, 2);
         const bodyMat = new THREE.MeshPhongMaterial({ color: 0xff0000 });
-        const carBody = new THREE.Mesh(bodyGeo, bodyMat);
+        const carBody = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.5, 2.2), bodyMat);
         carBody.castShadow = true;
         playerGroup.add(carBody);
 
-        // Cabin
-        const cabinGeo = new THREE.BoxGeometry(0.8, 0.4, 1);
-        const cabinMat = new THREE.MeshPhongMaterial({ color: 0x333333 });
-        const cabin = new THREE.Mesh(cabinGeo, cabinMat);
-        cabin.position.y = 0.45;
-        cabin.position.z = -0.2;
+        const cabin = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.5, 1.1), new THREE.MeshPhongMaterial({ color: 0x222222 }));
+        cabin.position.set(0, 0.4, -0.2);
         playerGroup.add(cabin);
 
-        // Wheels
         const wheels = [];
-        const wheelGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.2, 12);
-        const wheelMat = new THREE.MeshPhongMaterial({ color: 0x222222 });
-        const wheelPos = [[0.6, -0.2, 0.7], [-0.6, -0.2, 0.7], [0.6, -0.2, -0.7], [-0.6, -0.2, -0.7]];
-        wheelPos.forEach(p => {
+        const wheelGeo = new THREE.CylinderGeometry(0.35, 0.35, 0.3, 12);
+        const wheelMat = new THREE.MeshPhongMaterial({ color: 0x111111 });
+        [[0.7, -0.2, 0.8], [-0.7, -0.2, 0.8], [0.7, -0.2, -0.8], [-0.7, -0.2, -0.8]].forEach(p => {
             const w = new THREE.Mesh(wheelGeo, wheelMat);
             w.rotation.z = Math.PI / 2;
-            w.position.set(p[0], p[1], p[2]);
+            w.position.set(...p);
             playerGroup.add(w);
             wheels.push(w);
         });
-
         scene.add(playerGroup);
 
-        // --- PHYSICS VARIABLES ---
-        const hillAngle = 0.18; // Slightly steeper
-        let pos = new THREE.Vector3(0, 0, 0);
+        // --- WORLD & PHYSICS ---
+        const hillAngle = 0.15;
+        let pos = new THREE.Vector3(0, 0.5, 0);
         let vel = new THREE.Vector3(0, 0, 0);
-        const gravity = -0.012;
-        const jumpStrength = 0.25;
-        let isGrounded = false;
         let score = 0;
+        let isGrounded = true;
 
-        // Function to get ground Y at a specific Z
-        function getGroundHeight(z) {
-            return -z * Math.tan(hillAngle);
-        }
+        const getGroundY = (z) => -z * Math.tan(hillAngle);
 
-        // Initialize position correctly on the slope
-        pos.y = getGroundHeight(0) + 0.5;
-
-        // --- WORLD ---
-        const floorGeo = new THREE.PlaneGeometry(30, 2000);
-        const floorMat = new THREE.MeshPhongMaterial({ color: 0x33aa33 });
+        const floorGeo = new THREE.PlaneGeometry(20, 2000);
+        const floorMat = new THREE.MeshPhongMaterial({ map: roadTexture });
         const floor = new THREE.Mesh(floorGeo, floorMat);
-        // Pivot from the top so it rotates downward into the distance
         floor.rotation.x = -Math.PI / 2 - hillAngle;
+        floor.position.y = getGroundY(1000);
         floor.position.z = -1000 * Math.cos(hillAngle);
-        floor.position.y = getGroundHeight(1000);
         floor.receiveShadow = true;
         scene.add(floor);
 
-        // --- HAZARDS & GEMS ---
+        // Grass/Side logic
+        const grassGeo = new THREE.PlaneGeometry(200, 2000);
+        const grassMat = new THREE.MeshPhongMaterial({ color: 0x228b22 });
+        const grass = new THREE.Mesh(grassGeo, grassMat);
+        grass.rotation.x = -Math.PI / 2 - hillAngle;
+        grass.position.y = getGroundY(1000) - 0.05;
+        grass.position.z = -1000 * Math.cos(hillAngle);
+        scene.add(grass);
+
+        // --- OBJECTS ---
         const hazards = [];
         const gems = [];
-        
-        function spawnHazards() {
-            for(let i=0; i<60; i++) {
-                const zPos = -i * 20 - 20;
-                
-                // Roadblocks
-                const hGeo = new THREE.BoxGeometry(3, 1, 0.5);
-                const hMat = new THREE.MeshPhongMaterial({ color: 0xffaa00 });
-                const h = new THREE.Mesh(hGeo, hMat);
-                h.position.set((Math.random() - 0.5) * 15, getGroundHeight(zPos) + 0.5, zPos);
+        function createWorld() {
+            hazards.forEach(h => scene.remove(h));
+            gems.forEach(g => scene.remove(g));
+            hazards.length = 0;
+            gems.length = 0;
+
+            for (let i = 0; i < 60; i++) {
+                const z = -40 - (i * 30);
+                const x = (Math.random() - 0.5) * 16;
+                const groundY = getGroundY(z);
+
+                // Obstacle
+                const h = new THREE.Mesh(new THREE.BoxGeometry(4, 1.2, 0.5), new THREE.MeshPhongMaterial({ color: 0xff4400 }));
+                h.position.set(x, groundY + 0.6, z);
                 h.rotation.x = -hillAngle;
-                h.castShadow = true;
                 scene.add(h);
                 hazards.push(h);
 
-                // Gems
-                const gGeo = new THREE.OctahedronGeometry(0.5);
-                const gMat = new THREE.MeshPhongMaterial({ color: 0xffff00, emissive: 0x555500 });
-                const g = new THREE.Mesh(gGeo, gMat);
-                const gz = zPos - 10;
-                g.position.set((Math.random() - 0.5) * 15, getGroundHeight(gz) + 1.2, gz);
+                // Gem
+                const g = new THREE.Mesh(new THREE.OctahedronGeometry(0.6), new THREE.MeshPhongMaterial({ color: 0x00ffff, emissive: 0x004444 }));
+                g.position.set((Math.random() - 0.5) * 14, getGroundY(z - 15) + 1.2, z - 15);
                 scene.add(g);
                 gems.push(g);
             }
         }
-        spawnHazards();
+        createWorld();
 
         // --- INPUT ---
         const keys = {};
         window.addEventListener('keydown', (e) => {
             keys[e.code] = true;
-            if(e.code === 'Space' && isGrounded) {
-                vel.y = jumpStrength;
+            if (e.code === 'Space' && isGrounded) {
+                vel.y = 0.3;
                 isGrounded = false;
             }
         });
@@ -167,76 +179,66 @@
             vel.set(0, 0, 0);
             score = 0;
             document.getElementById('score').innerText = score;
+            createWorld();
         }
 
-        // --- GAME LOOP ---
         function animate() {
             requestAnimationFrame(animate);
 
-            // 1. Gravity & Hill Physics
-            vel.y += gravity;
+            // 1. Friction & Gravity (Glide-y feel)
+            vel.y -= 0.01; // Gravity
+            vel.z -= 0.008; // Downhill acceleration
             
-            // Artificial "gravity" pulling the car down the slope
-            vel.z -= 0.006; 
+            // 2. Drifty Controls
+            if (keys['ArrowLeft'] || keys['KeyA']) vel.x -= 0.02;
+            if (keys['ArrowRight'] || keys['KeyD']) vel.x += 0.02;
             
-            // 2. Controls
-            if (keys['ArrowLeft'] || keys['KeyA']) vel.x -= 0.015;
-            if (keys['ArrowRight'] || keys['KeyD']) vel.x += 0.015;
-            
-            // Friction
-            vel.x *= 0.92;
-            vel.z *= 0.99;
+            // High momentum/Low friction
+            vel.x *= 0.96; 
+            vel.z *= 0.995;
             
             pos.add(vel);
 
-            // 3. Stick to Hill Surface
-            const groundY = getGroundHeight(pos.z);
-            if (pos.y < groundY + 0.5) {
-                pos.y = groundY + 0.5;
-                // If moving along ground, adjust Y velocity to match slope to stop "jitter"
-                // This makes it look like it's actually rolling down
-                vel.y = -vel.z * Math.tan(hillAngle); 
+            // 3. Ground Collision
+            const groundY = getGroundY(pos.z);
+            if (pos.y < groundY + 0.3) {
+                pos.y = groundY + 0.3;
+                vel.y = -vel.z * Math.tan(hillAngle); // Match slope velocity
                 isGrounded = true;
             } else {
                 isGrounded = false;
             }
 
-            // 4. Update Car Object
+            // 4. Update Visuals
             playerGroup.position.copy(pos);
-            playerGroup.rotation.x = -hillAngle; 
-            playerGroup.rotation.y = -vel.x * 2;
-            playerGroup.rotation.z = -vel.x * 1.5;
+            playerGroup.rotation.x = -hillAngle;
+            playerGroup.rotation.y = -vel.x * 2.5; // Visual lean/drift
+            playerGroup.rotation.z = -vel.x * 2;
+            wheels.forEach(w => w.rotation.x += vel.z * 3);
 
-            // Spin wheels based on speed
-            wheels.forEach(w => w.rotation.x += vel.z * 2);
+            // Camera smoothly follow
+            camera.position.lerp(new THREE.Vector3(pos.x * 0.5, pos.y + 4, pos.z + 10), 0.1);
+            camera.lookAt(pos.x, pos.y, pos.z - 10);
 
-            // 5. Camera follow
-            camera.position.set(pos.x, pos.y + 4, pos.z + 8);
-            camera.lookAt(pos.x, pos.y, pos.z - 5);
-
-            // 6. Hazard Collision
+            // Collisions
             hazards.forEach(h => {
-                if (playerGroup.position.distanceTo(h.position) < 1.8) {
+                if (Math.abs(pos.x - h.position.x) < 2.5 && Math.abs(pos.z - h.position.z) < 1 && Math.abs(pos.y - h.position.y) < 1) {
                     restart();
                 }
             });
 
-            // 7. Gem Collection
-            gems.forEach((g, idx) => {
+            gems.forEach((g, i) => {
                 g.rotation.y += 0.05;
-                if (playerGroup.position.distanceTo(g.position) < 1.5) {
+                if (pos.distanceTo(g.position) < 2) {
                     scene.remove(g);
-                    gems.splice(idx, 1);
+                    gems.splice(i, 1);
                     score += 100;
                     document.getElementById('score').innerText = score;
                 }
             });
 
-            // 8. Infinite Loop logic
-            if (pos.z < -1000) {
-                pos.z = 0;
-                pos.y = getGroundHeight(0) + 0.5;
-            }
+            // Infinite loop
+            if (pos.z < -1800) restart();
 
             renderer.render(scene, camera);
         }
