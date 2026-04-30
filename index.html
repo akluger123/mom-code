@@ -29,7 +29,7 @@
 </head>
 <body>
     <div id="ui">Score: <span id="score">0</span></div>
-    <div id="instructions">WASD/Arrows to Drift | SPACE to Jump | Avoid the Barriers!</div>
+    <div id="instructions">WASD to Drift/Air-Tricks | SPACE to Jump | Avoid the Barriers!</div>
 
     <script type="importmap">
         {
@@ -53,27 +53,20 @@
         renderer.shadowMap.enabled = true;
         document.body.appendChild(renderer.domElement);
 
-        // --- ROAD TEXTURE (Canvas generated) ---
+        // --- ROAD TEXTURE ---
         const roadCanvas = document.createElement('canvas');
         roadCanvas.width = 128;
         roadCanvas.height = 512;
         const ctx = roadCanvas.getContext('2d');
-        ctx.fillStyle = '#333'; // Asphalt
+        ctx.fillStyle = '#333';
         ctx.fillRect(0, 0, 128, 512);
         ctx.strokeStyle = '#fff';
         ctx.setLineDash([40, 40]);
         ctx.lineWidth = 4;
-        ctx.beginPath();
-        ctx.moveTo(64, 0); ctx.lineTo(64, 512); // Center line
-        ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.strokeStyle = '#ffcc00';
-        ctx.strokeRect(5, 0, 0, 512); // Side lines
-        ctx.strokeRect(123, 0, 0, 512);
+        ctx.beginPath(); ctx.moveTo(64, 0); ctx.lineTo(64, 512); ctx.stroke();
         
         const roadTexture = new THREE.CanvasTexture(roadCanvas);
-        roadTexture.wrapS = THREE.RepeatWrapping;
-        roadTexture.wrapT = THREE.RepeatWrapping;
+        roadTexture.wrapS = roadTexture.wrapT = THREE.RepeatWrapping;
         roadTexture.repeat.set(1, 100);
 
         // --- LIGHTING ---
@@ -84,15 +77,17 @@
         scene.add(new THREE.AmbientLight(0xffffff, 0.7));
 
         // --- PLAYER (CAR) ---
-        const playerGroup = new THREE.Group();
+        const playerPivot = new THREE.Group(); // Used for rotation independent of slope
+        const carModel = new THREE.Group();
+        
         const bodyMat = new THREE.MeshPhongMaterial({ color: 0xff0000 });
         const carBody = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.5, 2.2), bodyMat);
         carBody.castShadow = true;
-        playerGroup.add(carBody);
+        carModel.add(carBody);
 
         const cabin = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.5, 1.1), new THREE.MeshPhongMaterial({ color: 0x222222 }));
         cabin.position.set(0, 0.4, -0.2);
-        playerGroup.add(cabin);
+        carModel.add(cabin);
 
         const wheels = [];
         const wheelGeo = new THREE.CylinderGeometry(0.35, 0.35, 0.3, 12);
@@ -101,15 +96,17 @@
             const w = new THREE.Mesh(wheelGeo, wheelMat);
             w.rotation.z = Math.PI / 2;
             w.position.set(...p);
-            playerGroup.add(w);
+            carModel.add(w);
             wheels.push(w);
         });
-        scene.add(playerGroup);
+        playerPivot.add(carModel);
+        scene.add(playerPivot);
 
         // --- WORLD & PHYSICS ---
         const hillAngle = 0.15;
         let pos = new THREE.Vector3(0, 0.5, 0);
         let vel = new THREE.Vector3(0, 0, 0);
+        let airRotation = { x: 0, y: 0 };
         let score = 0;
         let isGrounded = true;
 
@@ -124,7 +121,6 @@
         floor.receiveShadow = true;
         scene.add(floor);
 
-        // Grass/Side logic
         const grassGeo = new THREE.PlaneGeometry(200, 2000);
         const grassMat = new THREE.MeshPhongMaterial({ color: 0x228b22 });
         const grass = new THREE.Mesh(grassGeo, grassMat);
@@ -139,24 +135,22 @@
         function createWorld() {
             hazards.forEach(h => scene.remove(h));
             gems.forEach(g => scene.remove(g));
-            hazards.length = 0;
-            gems.length = 0;
+            hazards.length = 0; gems.length = 0;
 
             for (let i = 0; i < 60; i++) {
-                const z = -40 - (i * 30);
+                const z = -40 - (i * 35);
                 const x = (Math.random() - 0.5) * 16;
                 const groundY = getGroundY(z);
 
-                // Obstacle
                 const h = new THREE.Mesh(new THREE.BoxGeometry(4, 1.2, 0.5), new THREE.MeshPhongMaterial({ color: 0xff4400 }));
-                h.position.set(x, groundY + 0.6, z);
+                h.position.set(x, groundY + 0.5 * Math.cos(hillAngle), z);
                 h.rotation.x = -hillAngle;
                 scene.add(h);
                 hazards.push(h);
 
-                // Gem
                 const g = new THREE.Mesh(new THREE.OctahedronGeometry(0.6), new THREE.MeshPhongMaterial({ color: 0x00ffff, emissive: 0x004444 }));
-                g.position.set((Math.random() - 0.5) * 14, getGroundY(z - 15) + 1.2, z - 15);
+                const gemZ = z - 15;
+                g.position.set((Math.random() - 0.5) * 14, getGroundY(gemZ) + 1.0, gemZ);
                 scene.add(g);
                 gems.push(g);
             }
@@ -168,7 +162,7 @@
         window.addEventListener('keydown', (e) => {
             keys[e.code] = true;
             if (e.code === 'Space' && isGrounded) {
-                vel.y = 0.3;
+                vel.y = 0.45;
                 isGrounded = false;
             }
         });
@@ -177,6 +171,8 @@
         function restart() {
             pos.set(0, 0.5, 0);
             vel.set(0, 0, 0);
+            airRotation = { x: 0, y: 0 };
+            carModel.rotation.set(0, 0, 0);
             score = 0;
             document.getElementById('score').innerText = score;
             createWorld();
@@ -185,46 +181,65 @@
         function animate() {
             requestAnimationFrame(animate);
 
-            // 1. Friction & Gravity (Glide-y feel)
-            vel.y -= 0.01; // Gravity
-            vel.z -= 0.008; // Downhill acceleration
+            // 1. Friction & Gravity
+            vel.y -= 0.015;
+            vel.z -= 0.01;
             
-            // 2. Drifty Controls
-            if (keys['ArrowLeft'] || keys['KeyA']) vel.x -= 0.02;
-            if (keys['ArrowRight'] || keys['KeyD']) vel.x += 0.02;
+            // 2. Controls
+            if (isGrounded) {
+                // Ground Steering (Faster)
+                if (keys['ArrowLeft'] || keys['KeyA']) vel.x -= 0.04;
+                if (keys['ArrowRight'] || keys['KeyD']) vel.x += 0.04;
+                
+                // Reset air rotation when grounded
+                carModel.rotation.x = THREE.MathUtils.lerp(carModel.rotation.x, 0, 0.1);
+                carModel.rotation.y = THREE.MathUtils.lerp(carModel.rotation.y, 0, 0.1);
+            } else {
+                // Air Tricks
+                if (keys['KeyW']) carModel.rotation.x -= 0.15; // Frontflip
+                if (keys['KeyS']) carModel.rotation.x += 0.15; // Backflip
+                if (keys['KeyA']) carModel.rotation.y += 0.15; // 360 Left
+                if (keys['KeyD']) carModel.rotation.y -= 0.15; // 360 Right
+            }
             
-            // High momentum/Low friction
-            vel.x *= 0.96; 
+            vel.x *= 0.92; // Slightly higher friction for better control
             vel.z *= 0.995;
-            
             pos.add(vel);
 
             // 3. Ground Collision
-            const groundY = getGroundY(pos.z);
-            if (pos.y < groundY + 0.3) {
-                pos.y = groundY + 0.3;
-                vel.y = -vel.z * Math.tan(hillAngle); // Match slope velocity
+            const groundY = getGroundY(pos.z) + 0.3;
+            if (pos.y < groundY) {
+                pos.y = groundY;
+                vel.y = -vel.z * Math.tan(hillAngle);
                 isGrounded = true;
             } else {
                 isGrounded = false;
             }
 
             // 4. Update Visuals
-            playerGroup.position.copy(pos);
-            playerGroup.rotation.x = -hillAngle;
-            playerGroup.rotation.y = -vel.x * 2.5; // Visual lean/drift
-            playerGroup.rotation.z = -vel.x * 2;
+            playerPivot.position.copy(pos);
+            playerPivot.rotation.x = -hillAngle; // Pivot follows hill slope
+            
+            // Visual Lean (only if not doing massive air tricks)
+            if (isGrounded) {
+                playerPivot.rotation.y = -vel.x * 0.8;
+                playerPivot.rotation.z = -vel.x * 1.5;
+            } else {
+                playerPivot.rotation.z = THREE.MathUtils.lerp(playerPivot.rotation.z, 0, 0.1);
+            }
+            
             wheels.forEach(w => w.rotation.x += vel.z * 3);
 
-            // Camera smoothly follow
-            camera.position.lerp(new THREE.Vector3(pos.x * 0.5, pos.y + 4, pos.z + 10), 0.1);
+            // Camera follow
+            camera.position.lerp(new THREE.Vector3(pos.x * 0.5, pos.y + 4.5, pos.z + 12), 0.1);
             camera.lookAt(pos.x, pos.y, pos.z - 10);
 
             // Collisions
             hazards.forEach(h => {
-                if (Math.abs(pos.x - h.position.x) < 2.5 && Math.abs(pos.z - h.position.z) < 1 && Math.abs(pos.y - h.position.y) < 1) {
-                    restart();
-                }
+                const dx = Math.abs(pos.x - h.position.x);
+                const dz = Math.abs(pos.z - h.position.z);
+                const dy = Math.abs(pos.y - h.position.y);
+                if (dx < 2.2 && dz < 0.8 && dy < 1) restart();
             });
 
             gems.forEach((g, i) => {
@@ -237,8 +252,7 @@
                 }
             });
 
-            // Infinite loop
-            if (pos.z < -1800) restart();
+            if (pos.z < -2000) restart();
 
             renderer.render(scene, camera);
         }
