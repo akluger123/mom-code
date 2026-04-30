@@ -3,18 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Super Fun Zone!</title>
+    <title>Downhill Car Dash!</title>
     <style>
-        body { margin: 0; overflow: hidden; font-family: 'Arial Rounded MT Bold', 'Helvetica', sans-serif; background: #000; }
+        body { margin: 0; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #000; }
         #ui {
             position: absolute;
             top: 20px;
             left: 20px;
             color: white;
-            font-size: 24px;
-            text-shadow: 2px 2px #ff00ff;
+            font-size: 32px;
+            font-weight: bold;
+            text-shadow: 2px 2px #000;
             pointer-events: none;
-            user-select: none;
         }
         #instructions {
             position: absolute;
@@ -22,21 +22,19 @@
             width: 100%;
             text-align: center;
             color: white;
-            font-size: 18px;
-            text-shadow: 1px 1px 5px black;
+            font-size: 20px;
+            text-shadow: 2px 2px 4px black;
         }
     </style>
 </head>
 <body>
     <div id="ui">Score: <span id="score">0</span></div>
-    <div id="instructions">Use ARROW KEYS or WASD to Roll! Collect the Gold Gems!</div>
+    <div id="instructions">WASD/Arrows to Steer | SPACE to Jump | Avoid the Hazard Blocks!</div>
 
-    <!-- Load Three.js from CDN -->
     <script type="importmap">
         {
             "imports": {
-                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
             }
         }
     </script>
@@ -46,8 +44,8 @@
 
         // --- SETUP ---
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x87ceeb); // Sky blue
-        scene.fog = new THREE.Fog(0x87ceeb, 10, 50);
+        scene.background = new THREE.Color(0x87ceeb);
+        scene.fog = new THREE.Fog(0x87ceeb, 20, 100);
 
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -56,107 +54,173 @@
         document.body.appendChild(renderer.domElement);
 
         // --- LIGHTING ---
-        const light = new THREE.DirectionalLight(0xffffff, 1);
-        light.position.set(10, 20, 10);
-        light.castShadow = true;
-        scene.add(light);
-        scene.add(new THREE.AmbientLight(0x404040, 2));
+        const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+        sun.position.set(10, 50, 10);
+        sun.castShadow = true;
+        scene.add(sun);
+        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
 
-        // --- PLAYER (The Ball) ---
-        const playerGeo = new THREE.SphereGeometry(0.5, 32, 32);
-        const playerMat = new THREE.MeshPhongMaterial({ color: 0xff4444, shininess: 100 });
-        const player = new THREE.Mesh(playerGeo, playerMat);
-        player.castShadow = true;
-        player.position.y = 1;
-        scene.add(player);
+        // --- PLAYER (CAR MODEL) ---
+        const playerGroup = new THREE.Group();
+        
+        // Car Body
+        const bodyGeo = new THREE.BoxGeometry(1, 0.5, 2);
+        const bodyMat = new THREE.MeshPhongMaterial({ color: 0xff0000 });
+        const carBody = new THREE.Mesh(bodyGeo, bodyMat);
+        carBody.castShadow = true;
+        playerGroup.add(carBody);
 
-        let velocity = new THREE.Vector3();
-        const speed = 0.02;
-        const friction = 0.95;
+        // Cabin
+        const cabinGeo = new THREE.BoxGeometry(0.8, 0.4, 1);
+        const cabinMat = new THREE.MeshPhongMaterial({ color: 0x333333 });
+        const cabin = new THREE.Mesh(cabinGeo, cabinMat);
+        cabin.position.y = 0.45;
+        cabin.position.z = -0.2;
+        playerGroup.add(cabin);
 
-        // --- FLOOR ---
-        const floorGeo = new THREE.PlaneGeometry(100, 100);
-        const floorMat = new THREE.MeshPhongMaterial({ color: 0x228b22 });
-        const floor = new THREE.Mesh(floorGeo, floorMat);
-        floor.rotation.x = -Math.PI / 2;
-        floor.receiveShadow = true;
-        scene.add(floor);
+        // Wheels
+        const wheelGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.2, 12);
+        const wheelMat = new THREE.MeshPhongMaterial({ color: 0x222222 });
+        const wheelPos = [[0.6, -0.2, 0.7], [-0.6, -0.2, 0.7], [0.6, -0.2, -0.7], [-0.6, -0.2, -0.7]];
+        wheelPos.forEach(p => {
+            const w = new THREE.Mesh(wheelGeo, wheelMat);
+            w.rotation.z = Math.PI / 2;
+            w.position.set(p[0], p[1], p[2]);
+            playerGroup.add(w);
+        });
 
-        // --- GEMS (Collectibles) ---
-        const gems = [];
+        scene.add(playerGroup);
+
+        // --- PHYSICS VARIABLES ---
+        let pos = new THREE.Vector3(0, 1, 0);
+        let vel = new THREE.Vector3(0, 0, 0);
+        const gravity = -0.015;
+        const jumpStrength = 0.35;
+        let isGrounded = false;
         let score = 0;
-        const scoreEl = document.getElementById('score');
+        const hillAngle = 0.15; // 10 degrees slope
 
-        function createGem() {
-            const gemGeo = new THREE.OctahedronGeometry(0.4);
-            const gemMat = new THREE.MeshPhongMaterial({ color: 0xffd700, emissive: 0xaa8800 });
-            const gem = new THREE.Mesh(gemGeo, gemMat);
-            gem.position.set((Math.random() - 0.5) * 40, 0.8, (Math.random() - 0.5) * 40);
-            scene.add(gem);
-            gems.push(gem);
+        // --- WORLD ---
+        const floorGroup = new THREE.Group();
+        const floorGeo = new THREE.PlaneGeometry(20, 1000);
+        const floorMat = new THREE.MeshPhongMaterial({ color: 0x33aa33 });
+        const floor = new THREE.Mesh(floorGeo, floorMat);
+        floor.rotation.x = -Math.PI / 2 - hillAngle;
+        floor.receiveShadow = true;
+        floorGroup.add(floor);
+        scene.add(floorGroup);
+
+        // --- HAZARDS & GEMS ---
+        const hazards = [];
+        const gems = [];
+        
+        function spawnHazards() {
+            // Roadblocks
+            for(let i=0; i<40; i++) {
+                const hGeo = new THREE.BoxGeometry(3, 1, 0.5);
+                const hMat = new THREE.MeshPhongMaterial({ color: 0xffaa00 });
+                const h = new THREE.Mesh(hGeo, hMat);
+                h.position.set((Math.random() - 0.5) * 15, -i*15 * Math.sin(hillAngle), -i*15);
+                h.rotation.x = -hillAngle;
+                h.castShadow = true;
+                scene.add(h);
+                hazards.push(h);
+            }
+            // Gems
+            for(let i=0; i<30; i++) {
+                const gGeo = new THREE.OctahedronGeometry(0.5);
+                const gMat = new THREE.MeshPhongMaterial({ color: 0xffff00, emissive: 0x555500 });
+                const g = new THREE.Mesh(gGeo, gMat);
+                g.position.set((Math.random() - 0.5) * 15, -i*25 * Math.sin(hillAngle) + 1, -i*25);
+                scene.add(g);
+                gems.push(g);
+            }
         }
+        spawnHazards();
 
-        for(let i=0; i<15; i++) createGem();
-
-        // --- OBSTACLES (Bouncy Cubes) ---
-        const blocks = [];
-        for(let i=0; i<10; i++) {
-            const bGeo = new THREE.BoxGeometry(2, 2, 2);
-            const bMat = new THREE.MeshPhongMaterial({ color: 0x00ff88 });
-            const b = new THREE.Mesh(bGeo, bMat);
-            b.position.set((Math.random() - 0.5) * 30, 1, (Math.random() - 0.5) * 30);
-            b.castShadow = true;
-            scene.add(b);
-            blocks.push(b);
-        }
-
-        // --- CONTROLS ---
+        // --- INPUT ---
         const keys = {};
-        window.addEventListener('keydown', (e) => keys[e.code] = true);
+        window.addEventListener('keydown', (e) => {
+            keys[e.code] = true;
+            if(e.code === 'Space' && isGrounded) {
+                vel.y = jumpStrength;
+                isGrounded = false;
+            }
+        });
         window.addEventListener('keyup', (e) => keys[e.code] = false);
+
+        function restart() {
+            pos.set(0, 2, 0);
+            vel.set(0, 0, 0);
+            score = 0;
+            document.getElementById('score').innerText = score;
+        }
 
         // --- GAME LOOP ---
         function animate() {
             requestAnimationFrame(animate);
 
-            // Movement Logic
-            if (keys['ArrowUp'] || keys['KeyW']) velocity.z -= speed;
-            if (keys['ArrowDown'] || keys['KeyS']) velocity.z += speed;
-            if (keys['ArrowLeft'] || keys['KeyA']) velocity.x -= speed;
-            if (keys['ArrowRight'] || keys['KeyD']) velocity.x += speed;
+            // 1. Apply Downhill Acceleration
+            vel.z -= 0.005; 
+            
+            // 2. Controls
+            if (keys['ArrowLeft'] || keys['KeyA']) vel.x -= 0.01;
+            if (keys['ArrowRight'] || keys['KeyD']) vel.x += 0.01;
+            
+            // Friction
+            vel.x *= 0.95;
+            vel.z *= 0.98;
+            
+            // 3. Gravity
+            vel.y += gravity;
+            pos.add(vel);
 
-            velocity.multiplyScalar(friction); 
-            player.position.add(velocity);
+            // 4. Collision with Hill (The Floor)
+            const floorY = -pos.z * Math.tan(hillAngle);
+            if (pos.y < floorY + 0.5) {
+                pos.y = floorY + 0.5;
+                vel.y = 0;
+                isGrounded = true;
+            }
 
-            // Rotate ball based on speed
-            player.rotation.x += velocity.z * 2;
-            player.rotation.z -= velocity.x * 2;
+            // 5. Update Car Object
+            playerGroup.position.copy(pos);
+            playerGroup.rotation.x = -hillAngle; // Align to slope
+            playerGroup.rotation.y = -vel.x * 2; // Lean into turns
+            playerGroup.rotation.z = -vel.x * 1.5;
 
-            // Camera follow
-            camera.position.set(player.position.x, player.position.y + 5, player.position.z + 10);
-            camera.lookAt(player.position);
+            // 6. Camera follow
+            camera.position.set(pos.x, pos.y + 4, pos.z + 8);
+            camera.lookAt(pos.x, pos.y, pos.z - 5);
 
-            // Gem rotation & collection
-            gems.forEach((gem, index) => {
-                gem.rotation.y += 0.05;
-                const dist = player.position.distanceTo(gem.position);
-                if (dist < 1) {
-                    scene.remove(gem);
-                    gems.splice(index, 1);
-                    score += 10;
-                    scoreEl.innerText = score;
-                    createGem(); // Add a new one
+            // 7. Hazard Collision (Lose State)
+            hazards.forEach(h => {
+                const dist = playerGroup.position.distanceTo(h.position);
+                if (dist < 1.8) {
+                    restart();
                 }
             });
 
-            // Boundary limit
-            if (Math.abs(player.position.x) > 50) player.position.x *= -0.9;
-            if (Math.abs(player.position.z) > 50) player.position.z *= -0.9;
+            // 8. Gem Collection
+            gems.forEach((g, idx) => {
+                g.rotation.y += 0.05;
+                if (playerGroup.position.distanceTo(g.position) < 1.5) {
+                    scene.remove(g);
+                    gems.splice(idx, 1);
+                    score += 100;
+                    document.getElementById('score').innerText = score;
+                }
+            });
+
+            // 9. Infinite Loop logic (teleport back up but keep score if they reach end)
+            if (pos.z < -600) {
+                pos.z = 0;
+                pos.y = 2;
+            }
 
             renderer.render(scene, camera);
         }
 
-        // Handle Resize
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
