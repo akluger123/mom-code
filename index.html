@@ -1,1 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Super Fun Zone!</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: 'Arial Rounded MT Bold', 'Helvetica', sans-serif; background: #000; }
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            font-size: 24px;
+            text-shadow: 2px 2px #ff00ff;
+            pointer-events: none;
+            user-select: none;
+        }
+        #instructions {
+            position: absolute;
+            bottom: 20px;
+            width: 100%;
+            text-align: center;
+            color: white;
+            font-size: 18px;
+            text-shadow: 1px 1px 5px black;
+        }
+    </style>
+</head>
+<body>
+    <div id="ui">Score: <span id="score">0</span></div>
+    <div id="instructions">Use ARROW KEYS or WASD to Roll! Collect the Gold Gems!</div>
 
+    <!-- Load Three.js from CDN -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+
+        // --- SETUP ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87ceeb); // Sky blue
+        scene.fog = new THREE.Fog(0x87ceeb, 10, 50);
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        document.body.appendChild(renderer.domElement);
+
+        // --- LIGHTING ---
+        const light = new THREE.DirectionalLight(0xffffff, 1);
+        light.position.set(10, 20, 10);
+        light.castShadow = true;
+        scene.add(light);
+        scene.add(new THREE.AmbientLight(0x404040, 2));
+
+        // --- PLAYER (The Ball) ---
+        const playerGeo = new THREE.SphereGeometry(0.5, 32, 32);
+        const playerMat = new THREE.MeshPhongMaterial({ color: 0xff4444, shininess: 100 });
+        const player = new THREE.Mesh(playerGeo, playerMat);
+        player.castShadow = true;
+        player.position.y = 1;
+        scene.add(player);
+
+        let velocity = new THREE.Vector3();
+        const speed = 0.02;
+        const friction = 0.95;
+
+        // --- FLOOR ---
+        const floorGeo = new THREE.PlaneGeometry(100, 100);
+        const floorMat = new THREE.MeshPhongMaterial({ color: 0x228b22 });
+        const floor = new THREE.Mesh(floorGeo, floorMat);
+        floor.rotation.x = -Math.PI / 2;
+        floor.receiveShadow = true;
+        scene.add(floor);
+
+        // --- GEMS (Collectibles) ---
+        const gems = [];
+        let score = 0;
+        const scoreEl = document.getElementById('score');
+
+        function createGem() {
+            const gemGeo = new THREE.OctahedronGeometry(0.4);
+            const gemMat = new THREE.MeshPhongMaterial({ color: 0xffd700, emissive: 0xaa8800 });
+            const gem = new THREE.Mesh(gemGeo, gemMat);
+            gem.position.set((Math.random() - 0.5) * 40, 0.8, (Math.random() - 0.5) * 40);
+            scene.add(gem);
+            gems.push(gem);
+        }
+
+        for(let i=0; i<15; i++) createGem();
+
+        // --- OBSTACLES (Bouncy Cubes) ---
+        const blocks = [];
+        for(let i=0; i<10; i++) {
+            const bGeo = new THREE.BoxGeometry(2, 2, 2);
+            const bMat = new THREE.MeshPhongMaterial({ color: 0x00ff88 });
+            const b = new THREE.Mesh(bGeo, bMat);
+            b.position.set((Math.random() - 0.5) * 30, 1, (Math.random() - 0.5) * 30);
+            b.castShadow = true;
+            scene.add(b);
+            blocks.push(b);
+        }
+
+        // --- CONTROLS ---
+        const keys = {};
+        window.addEventListener('keydown', (e) => keys[e.code] = true);
+        window.addEventListener('keyup', (e) => keys[e.code] = false);
+
+        // --- GAME LOOP ---
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Movement Logic
+            if (keys['ArrowUp'] || keys['KeyW']) velocity.z -= speed;
+            if (keys['ArrowDown'] || keys['KeyS']) velocity.z += speed;
+            if (keys['ArrowLeft'] || keys['KeyA']) velocity.x -= speed;
+            if (keys['ArrowRight'] || keys['KeyD']) velocity.x += speed;
+
+            velocity.multiplyScalar(friction); 
+            player.position.add(velocity);
+
+            // Rotate ball based on speed
+            player.rotation.x += velocity.z * 2;
+            player.rotation.z -= velocity.x * 2;
+
+            // Camera follow
+            camera.position.set(player.position.x, player.position.y + 5, player.position.z + 10);
+            camera.lookAt(player.position);
+
+            // Gem rotation & collection
+            gems.forEach((gem, index) => {
+                gem.rotation.y += 0.05;
+                const dist = player.position.distanceTo(gem.position);
+                if (dist < 1) {
+                    scene.remove(gem);
+                    gems.splice(index, 1);
+                    score += 10;
+                    scoreEl.innerText = score;
+                    createGem(); // Add a new one
+                }
+            });
+
+            // Boundary limit
+            if (Math.abs(player.position.x) > 50) player.position.x *= -0.9;
+            if (Math.abs(player.position.z) > 50) player.position.z *= -0.9;
+
+            renderer.render(scene, camera);
+        }
+
+        // Handle Resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+    </script>
+</body>
+</html>
