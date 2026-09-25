@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MOV to MP4 Converter</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: #f4f6f8;
+      color: #333;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      margin: 0;
+    }
+    .container {
+      background: #ffffff;
+      padding: 2.5rem;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+      max-width: 480px;
+      width: 100%;
+      text-align: center;
+    }
+    h1 {
+      font-size: 1.5rem;
+      margin-bottom: 0.5rem;
+      color: #111;
+    }
+    p {
+      font-size: 0.9rem;
+      color: #666;
+      margin-bottom: 1.5rem;
+    }
+    .file-input-wrapper {
+      margin-bottom: 1.5rem;
+    }
+    input[type="file"] {
+      display: none;
+    }
+    .custom-file-upload {
+      display: inline-block;
+      padding: 0.75rem 1.5rem;
+      background-color: #eef2ff;
+      color: #4f46e5;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: background-color 0.2s;
+    }
+    .custom-file-upload:hover {
+      background-color: #e0e7ff;
+    }
+    button {
+      width: 100%;
+      padding: 0.75rem;
+      background-color: #4f46e5;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+    button:hover:not(:disabled) {
+      background-color: #4338ca;
+    }
+    button:disabled {
+      background-color: #a5b4fc;
+      cursor: not-allowed;
+    }
+    #status {
+      margin-top: 1.25rem;
+      font-size: 0.875rem;
+      color: #4b5563;
+      min-height: 1.2em;
+    }
+    .download-link {
+      display: inline-block;
+      margin-top: 1.25rem;
+      padding: 0.75rem 1.5rem;
+      background-color: #10b981;
+      color: white;
+      text-decoration: none;
+      border-radius: 8px;
+      font-weight: 600;
+      transition: background-color 0.2s;
+    }
+    .download-link:hover {
+      background-color: #059669;
+    }
+    #fileName {
+      margin-top: 0.5rem;
+      font-size: 0.85rem;
+      color: #6b7280;
+    }
+  </style>
+  <!-- Load FFmpeg.wasm from CDN -->
+  <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
+</head>
+<body>
+
+  <div class="container">
+    <h1>MOV to MP4 Converter</h1>
+    <p>Convert MOV video files directly in your browser without uploading to any server.</p>
+
+    <div class="file-input-wrapper">
+      <label for="uploader" class="custom-file-upload">Choose MOV File</label>
+      <input type="file" id="uploader" accept=".mov">
+      <div id="fileName">No file chosen</div>
+    </div>
+
+    <button id="convertBtn" disabled>Convert to MP4</button>
+
+    <div id="status">Loading FFmpeg engine...</div>
+    <div id="downloadContainer"></div>
+  </div>
+
+  <script>
+    const { createFFmpeg, fetchFile } = FFmpeg;
+    const ffmpeg = createFFmpeg({ log: true });
+
+    const uploader = document.getElementById('uploader');
+    const convertBtn = document.getElementById('convertBtn');
+    const status = document.getElementById('status');
+    const downloadContainer = document.getElementById('downloadContainer');
+    const fileNameDiv = document.getElementById('fileName');
+
+    // Initialize FFmpeg
+    async function loadFFmpeg() {
+      try {
+        await ffmpeg.load();
+        status.innerText = 'Ready for conversion.';
+      } catch (err) {
+        status.innerText = 'Failed to load conversion engine. Make sure cross-origin isolation is supported if running locally.';
+        console.error(err);
+      }
+    }
+    loadFFmpeg();
+
+    uploader.addEventListener('change', () => {
+      if (uploader.files.length > 0) {
+        fileNameDiv.innerText = uploader.files[0].name;
+        if (ffmpeg.isLoaded()) {
+          convertBtn.disabled = false;
+        }
+      } else {
+        fileNameDiv.innerText = 'No file chosen';
+        convertBtn.disabled = true;
+      }
+    });
+
+    convertBtn.addEventListener('click', async () => {
+      const file = uploader.files[0];
+      if (!file) return;
+
+      convertBtn.disabled = true;
+      downloadContainer.innerHTML = '';
+      status.innerText = 'Reading file...';
+
+      const inputName = 'input.mov';
+      const outputName = 'output.mp4';
+
+      // Load file into WebAssembly Virtual File System
+      ffmpeg.FS('writeFile', inputName, await fetchFile(file));
+
+      status.innerText = 'Converting... (This may take a moment depending on file size)';
+
+      // Run FFmpeg conversion command
+      // -c:v libx264 uses H.264 video codec, -preset ultrafast speeds up browser encoding
+      await ffmpeg.run('-i', inputName, '-c:v', 'libx264', '-preset', 'ultrafast', '-c:a', 'aac', outputName);
+
+      status.innerText = 'Conversion complete!';
+
+      // Read output file from WebAssembly Memory
+      const data = ffmpeg.FS('readFile', outputName);
+
+      // Create download link
+      const blob = new Blob([data.buffer], { type: 'video/mp4' });
+      const url = URL.createObjectURL(blob);
+
+      const downloadLink = document.createElement('a');
+      downloadLink.href = url;
+      downloadLink.download = file.name.replace(/\.[^/.]+$/, '') + '.mp4';
+      downloadLink.className = 'download-link';
+      downloadLink.innerText = 'Download MP4';
+
+      downloadContainer.appendChild(downloadLink);
+
+      // Clean up files in virtual memory
+      ffmpeg.FS('unlink', inputName);
+      ffmpeg.FS('unlink', outputName);
+      convertBtn.disabled = false;
+    });
+  </script>
+</body>
+</html>
